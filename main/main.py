@@ -7,6 +7,7 @@ import re
 
 import cv2
 import numpy as np
+import czifile
 from tqdm import tqdm
 
 from lxml import etree
@@ -718,6 +719,27 @@ def convert_video_to_images(video_path, n_frames, desired_img_format):
     return file_path, video_name_ext
 
 
+def convert_czi_to_image(czi_path, desired_img_format):
+    # create folder to store images
+
+    split_path = czi_path.split(os.path.sep)
+    input_folder = split_path[0]
+    output_folder = os.path.join( input_folder, "converted" )
+
+    converted_name, converted_ext = os.path.splitext( czi_path )
+    converted_ext = converted_ext.replace(".", "_")
+    converted_name = converted_name.replace("\\", "_") + converted_ext + desired_img_format
+    converted_path = os.path.join( output_folder, converted_name )
+
+    if not os.path.exists(converted_path):
+        os.makedirs(output_folder, exist_ok=True)
+
+        print(f"Converting czi image {czi_path} -> {converted_name}")
+        img = czifile.imread( czi_path )
+        img = img.reshape( img.shape[1:] )
+        ret = cv2.imwrite( converted_path, img )
+    return converted_path
+
 def nonblank_lines(f):
     for l in f:
         line = l.rstrip()
@@ -973,34 +995,42 @@ if __name__ == '__main__':
     # load all images and videos (with multiple extensions) from a directory using OpenCV
     IMAGE_PATH_LIST = []
     VIDEO_NAME_DICT = {}
-    for f in sorted(os.listdir(INPUT_DIR), key = natural_sort_key):
-        f_path = os.path.join(INPUT_DIR, f)
-        if os.path.isdir(f_path):
-            # skip directories
-            continue
-        # check if it is an image
-        test_img = cv2.imread(f_path)
-        if test_img is not None:
-            IMAGE_PATH_LIST.append(f_path)
-        else:
-            # test if it is a video
-            test_video_cap = cv2.VideoCapture(f_path)
-            n_frames = int(test_video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            test_video_cap.release()
-            if n_frames > 0:
-                # it is a video
-                desired_img_format = '.jpg'
-                video_frames_path, video_name_ext = convert_video_to_images(f_path, n_frames, desired_img_format)
-                # add video frames to image list
-                frame_list = sorted(os.listdir(video_frames_path), key = natural_sort_key)
-                ## store information about those frames
-                first_index = len(IMAGE_PATH_LIST)
-                last_index = first_index + len(frame_list) # exclusive
-                indexes_dict = {}
-                indexes_dict['first_index'] = first_index
-                indexes_dict['last_index'] = last_index
-                VIDEO_NAME_DICT[video_name_ext] = indexes_dict
-                IMAGE_PATH_LIST.extend((os.path.join(video_frames_path, frame) for frame in frame_list))
+    for root, dirs, files in os.walk(INPUT_DIR):
+        for f in sorted(files, key = natural_sort_key):
+            f_path = os.path.join(root, f)
+            if os.path.isdir(f_path):
+                # skip directories
+                continue
+            # check if it is an image
+            test_img = cv2.imread(f_path)
+            if test_img is not None:
+                IMAGE_PATH_LIST.append(f_path)
+            else:
+                # test if it is a czi file
+                test_img = czifile.imread( f_path )
+                if test_img is not None:
+                    desired_img_format = '.png'
+                    converted_path = convert_czi_to_image( f_path, desired_img_format )
+                    IMAGE_PATH_LIST.append(converted_path)
+                else:
+                    # test if it is a video
+                    test_video_cap = cv2.VideoCapture(f_path)
+                    n_frames = int(test_video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                    test_video_cap.release()
+                    if n_frames > 0:
+                        # it is a video
+                        desired_img_format = '.jpg'
+                        video_frames_path, video_name_ext = convert_video_to_images(f_path, n_frames, desired_img_format)
+                        # add video frames to image list
+                        frame_list = sorted(os.listdir(video_frames_path), key = natural_sort_key)
+                        ## store information about those frames
+                        first_index = len(IMAGE_PATH_LIST)
+                        last_index = first_index + len(frame_list) # exclusive
+                        indexes_dict = {}
+                        indexes_dict['first_index'] = first_index
+                        indexes_dict['last_index'] = last_index
+                        VIDEO_NAME_DICT[video_name_ext] = indexes_dict
+                        IMAGE_PATH_LIST.extend((os.path.join(video_frames_path, frame) for frame in frame_list))
     last_img_index = len(IMAGE_PATH_LIST) - 1
 
     # create output directories
