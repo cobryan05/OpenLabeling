@@ -1,0 +1,7 @@
+torchvision
+torch
+seaborn
+requests
+pyyaml
+pillow
+pandas
