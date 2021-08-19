@@ -702,9 +702,9 @@ def draw_close_icon(tmp_img, x1_c, y1_c, x2_c, y2_c):
 def draw_info_bb_selected(tmp_img):
     for idx, obj in enumerate(img_objects):
         ind, x1, y1, x2, y2 = obj
-        if idx == selected_bbox:
-            x1_c, y1_c, x2_c, y2_c = get_close_icon(x1, y1, x2, y2)
-            draw_close_icon(tmp_img, x1_c, y1_c, x2_c, y2_c)
+        # if idx == selected_bbox:
+        #     x1_c, y1_c, x2_c, y2_c = get_close_icon(x1, y1, x2, y2)
+        #     draw_close_icon(tmp_img, x1_c, y1_c, x2_c, y2_c)
     return tmp_img
 
 
