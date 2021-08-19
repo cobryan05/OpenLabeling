@@ -13,7 +13,6 @@ from tqdm import tqdm
 from lxml import etree
 import xml.etree.cElementTree as ET
 
-
 DELAY = 20 # keyboard delay (in milliseconds)
 WITH_QT = False
 try:
@@ -29,6 +28,7 @@ parser = argparse.ArgumentParser(description='Open-source image labeling tool')
 parser.add_argument('-i', '--input_dir', default='input', type=str, help='Path to input directory')
 parser.add_argument('-o', '--output_dir', default='output', type=str, help='Path to output directory')
 parser.add_argument('-t', '--thickness', default='1', type=int, help='Bounding box and cross line thickness')
+parser.add_argument('-y', '--yoloWeights', default='', type=str, help='YOLO Weights file to use for prediction')
 parser.add_argument('--draw-from-PASCAL-files', action='store_true', help='Draw bounding boxes from the PASCAL files') # default YOLO
 '''
 tracker_types = ['CSRT', 'KCF','MOSSE', 'MIL', 'BOOSTING', 'MEDIANFLOW', 'TLD', 'GOTURN', 'DASIAMRPN']
@@ -1004,6 +1004,69 @@ class LabelTracker():
             json.dump(json_file_data, outfile, sort_keys=True, indent=4)
 
 
+# Backup current annotations and then clear them
+def clear_bboxes():
+    global img_objects, img_index
+    img_objects_bak = img_objects.copy()
+
+    img_path = IMAGE_PATH_LIST[img_index]
+    for path in get_annotation_paths(img_path, annotation_formats):
+        if os.path.exists( path ):
+            os.remove( path )
+    set_img_index( img_index )
+    return img_objects_bak
+
+
+def restore_bboxes( img, annotation_paths, img_objects ):
+    height, width = img.shape[:2]
+    for class_index, x1, y1, x2, y2 in img_objects:
+        save_bounding_box(annotation_paths, class_index, (x1,y1), (x2,y2), width, height)
+
+
+# Take x1,y1, width, height,  and return [0,1] scaled centroid coordinates and size
+def x1y1wh2rxywh( input, imageShape ):
+    x1,y1,w,h = input
+    imgY,imgX = imageShape[0:2]
+    x = (x1 + w/2)/imgX
+    y = (y1 + h/2)/imgY
+    w = w/imgX
+    h = h/imgY
+
+    return( x, y, w, h )
+
+
+# Take [0,1] scaled centroid x,y, width, height,  and return x1,y1 coordinates and size
+def rxywh2x1y1wh( input, imageShape ):
+    x,y,w,h = input
+    imgY,imgX = imageShape[0:2]
+    x1 = int((x - w/2)*imgX)
+    y1 = int((y - h/2)*imgY)
+    w = int(w*imgX)
+    h = int(h*imgY)
+
+    return( x1, y1, w, h )
+
+
+# Take yolo results and return and return x1,y1 coordinates and size """
+def yolo2xywh( input, imageShape ):
+    return rxywh2x1y1wh( yolo2rxywh( input ), imageShape )
+
+# Take yolo results and return and return [0,1] scaled centroid coordinates and size """
+def yolo2rxywh( input ):
+    (x,y),(w,h),_,_ = input
+    return( float(x), float(y), float(w), float(h) )
+
+
+def run_yolo( img, yolo ):
+    results = yolo.runInference( img )
+    yolo_img_objs = []
+    for result in results:
+        classIdx = int(result[3])
+        x,y,w,h = yolo2xywh( result, img.shape )
+        yolo_img_objs.append( ( classIdx, x, y, x+w, y+h ) )
+    return yolo_img_objs
+
+
 def complement_bgr(color):
     lo = min(color)
     hi = max(color)
@@ -1017,6 +1080,16 @@ if __name__ == '__main__':
     # load all images and videos (with multiple extensions) from a directory using OpenCV
     IMAGE_PATH_LIST = []
     VIDEO_NAME_DICT = {}
+
+    if args.yoloWeights:
+        try:
+            from yoloInference import YoloInference
+            yolo = YoloInference( args.yoloWeights )
+        except Exception as e:
+            print(f"Failed to load YOLO model: {e}")
+            yolo = None
+    else:
+        yolo = None
 
     for root, dirs, files in os.walk(INPUT_DIR):
         for f in sorted(files, key = natural_sort_key):
@@ -1106,6 +1179,7 @@ if __name__ == '__main__':
     edges_on = False
     text_on = True
     show_only_active_class = False
+    img_obj_bak = []
 
     display_text('Welcome!\n Press [h] for help.', 4000)
 
@@ -1189,6 +1263,7 @@ if __name__ == '__main__':
                 elif pressed_key == ord('d'):
                     img_index = increase_index(img_index, last_img_index)
                 set_img_index(img_index)
+                img_obj_bak = []
                 cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, img_index)
             elif pressed_key == ord('s') or pressed_key == ord('w'):
                 # change down current class key listener
@@ -1211,6 +1286,7 @@ if __name__ == '__main__':
                         '[w] or [s] to change Class.\n'
                         '[t] to toggle text\n'
                         '[c] to toggle inactive showing only active class bboxes\n'
+                        '[y] to clear bboxes and run yolo inference\n'
                         )
                 display_text(text, 5000)
             # show edges key listener
@@ -1227,6 +1303,15 @@ if __name__ == '__main__':
             elif pressed_key == ord('c'):
                 show_only_active_class = not show_only_active_class
                 display_text( f"Show only active class bboxes turned {'ON' if show_only_active_class else 'OFF'}!", 1000)
+            elif pressed_key == ord('y') and yolo is not None:
+                if len(img_obj_bak) == 0 :
+                    img_obj_bak = clear_bboxes()
+                    img_objects = run_yolo( img, yolo )
+                    restore_bboxes( tmp_img, annotation_paths, img_objects )
+            elif pressed_key == ord('u'):
+                tmp = img_objects.copy()
+                restore_bboxes( tmp_img, annotation_paths, img_obj_bak)
+                img_obj_bak = tmp
             elif pressed_key == ord('p'):
                 # check if the image is a frame from a video
                 is_from_video, video_name = is_frame_from_video(img_path)

@@ -15,7 +15,8 @@ class YoloInference:
 
 
     def runInference(self, img):
-        yoloImg, ratio, (width,height) = letterbox( img, 640 )
+        yoloImg, ratio, (width,height) = letterbox( img, img.shape[1] )
+
         yoloImg = yoloImg[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB and HWC to CHW
         yoloImg = np.ascontiguousarray(yoloImg)
         yoloImg = torch.from_numpy(yoloImg).to(self._device)
