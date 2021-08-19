@@ -56,6 +56,7 @@ if TRACKER_TYPE == "DASIAMRPN":
     from dasiamrpn import dasiamrpn
 
 WINDOW_NAME    = 'OpenLabeling'
+ZOOM_WINDOW_NAME = 'OpenLabeling (Zoomed)'
 TRACKBAR_IMG   = 'Image'
 TRACKBAR_CLASS = 'Class'
 
@@ -69,6 +70,7 @@ prev_was_double_click = False
 is_bbox_selected = False
 selected_bbox = -1
 LINE_THICKNESS = args.thickness
+ZOOM_RADIUS = 100
 
 mouse_x = 0
 mouse_y = 0
@@ -1084,6 +1086,9 @@ if __name__ == '__main__':
     cv2.resizeWindow(WINDOW_NAME, 1000, 700)
     cv2.setMouseCallback(WINDOW_NAME, mouse_listener)
 
+    cv2.namedWindow(ZOOM_WINDOW_NAME, cv2.WINDOW_KEEPRATIO)
+    cv2.resizeWindow(ZOOM_WINDOW_NAME, 400, 400)
+
     # selected image
     cv2.createTrackbar(TRACKBAR_IMG, WINDOW_NAME, 0, last_img_index, set_img_index)
 
@@ -1141,6 +1146,27 @@ if __name__ == '__main__':
                 point_2 = (-1, -1)
 
         cv2.imshow(WINDOW_NAME, tmp_img)
+
+        img_y, img_x, _ = tmp_img.shape
+        crop_left = mouse_x - ZOOM_RADIUS
+        crop_right = mouse_x + ZOOM_RADIUS
+        if crop_left < 0:
+            crop_left = 0
+            crop_right = min( 2*ZOOM_RADIUS, img_x )
+        elif crop_right > img_x:
+            crop_right = img_x
+            crop_left = max( crop_right - 2*ZOOM_RADIUS, 0 )
+
+        crop_top = mouse_y - ZOOM_RADIUS
+        crop_bottom = mouse_y + ZOOM_RADIUS
+        if crop_top < 0:
+            crop_top = 0
+            crop_bottom = min( 2*ZOOM_RADIUS, img_y )
+        elif crop_bottom > img_y:
+            crop_bottom = img_y
+            crop_top = max( crop_bottom - 2*ZOOM_RADIUS, 0)
+        cv2.imshow(ZOOM_WINDOW_NAME, tmp_img[crop_top:crop_bottom, crop_left:crop_right])
+
         pressed_key = cv2.waitKey(DELAY)
 
         if dragBBox.anchor_being_dragged is None:
