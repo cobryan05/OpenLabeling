@@ -225,7 +225,7 @@ def set_class_index(x):
 
 def draw_edges(tmp_img):
     blur = cv2.bilateralFilter(tmp_img, 3, 75, 75)
-    edges = cv2.Canny(blur, 150, 250, 3)
+    edges = cv2.Canny(blur, 15, 25, 3)
     edges = cv2.cvtColor(edges, cv2.COLOR_GRAY2RGB)
     # Overlap image and edges together
     tmp_img = np.bitwise_or(tmp_img, edges)
