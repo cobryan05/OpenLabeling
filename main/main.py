@@ -202,6 +202,19 @@ def set_img_index(x):
     text = 'Showing image {}/{}, path: {}'.format(str(img_index), str(last_img_index), img_path)
     display_text(text, 1000)
 
+    # create empty annotation files for each image, if it doesn't exist already
+    abs_path = os.path.abspath(img_path)
+    folder_name = os.path.dirname(img_path)
+    image_name = os.path.basename(img_path)
+    img_height, img_width, depth = (str(number) for number in img.shape)
+
+    for ann_path in get_annotation_paths(img_path, annotation_formats):
+        if not os.path.isfile(ann_path):
+            if '.txt' in ann_path:
+                open(ann_path, 'a').close()
+            elif '.xml' in ann_path:
+                create_PASCAL_VOC_xml(ann_path, abs_path, folder_name, image_name, img_height, img_width, depth)
+
 
 def set_class_index(x):
     global class_index
@@ -995,42 +1008,40 @@ if __name__ == '__main__':
     # load all images and videos (with multiple extensions) from a directory using OpenCV
     IMAGE_PATH_LIST = []
     VIDEO_NAME_DICT = {}
+
     for root, dirs, files in os.walk(INPUT_DIR):
         for f in sorted(files, key = natural_sort_key):
             f_path = os.path.join(root, f)
+            f_ext = os.path.splitext( f_path.lower() )[1]
             if os.path.isdir(f_path):
                 # skip directories
                 continue
             # check if it is an image
-            test_img = cv2.imread(f_path)
-            if test_img is not None:
+            if f_ext in ['.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff']:
                 IMAGE_PATH_LIST.append(f_path)
+            elif f_ext in ['.czi']:
+                desired_img_format = '.png'
+                converted_path = convert_czi_to_image( f_path, desired_img_format )
+                IMAGE_PATH_LIST.append(converted_path)
             else:
-                # test if it is a czi file
-                test_img = czifile.imread( f_path )
-                if test_img is not None:
-                    desired_img_format = '.png'
-                    converted_path = convert_czi_to_image( f_path, desired_img_format )
-                    IMAGE_PATH_LIST.append(converted_path)
-                else:
-                    # test if it is a video
-                    test_video_cap = cv2.VideoCapture(f_path)
-                    n_frames = int(test_video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                    test_video_cap.release()
-                    if n_frames > 0:
-                        # it is a video
-                        desired_img_format = '.jpg'
-                        video_frames_path, video_name_ext = convert_video_to_images(f_path, n_frames, desired_img_format)
-                        # add video frames to image list
-                        frame_list = sorted(os.listdir(video_frames_path), key = natural_sort_key)
-                        ## store information about those frames
-                        first_index = len(IMAGE_PATH_LIST)
-                        last_index = first_index + len(frame_list) # exclusive
-                        indexes_dict = {}
-                        indexes_dict['first_index'] = first_index
-                        indexes_dict['last_index'] = last_index
-                        VIDEO_NAME_DICT[video_name_ext] = indexes_dict
-                        IMAGE_PATH_LIST.extend((os.path.join(video_frames_path, frame) for frame in frame_list))
+                # test if it is a video
+                test_video_cap = cv2.VideoCapture(f_path)
+                n_frames = int(test_video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                test_video_cap.release()
+                if n_frames > 0:
+                    # it is a video
+                    desired_img_format = '.jpg'
+                    video_frames_path, video_name_ext = convert_video_to_images(f_path, n_frames, desired_img_format)
+                    # add video frames to image list
+                    frame_list = sorted(os.listdir(video_frames_path), key = natural_sort_key)
+                    ## store information about those frames
+                    first_index = len(IMAGE_PATH_LIST)
+                    last_index = first_index + len(frame_list) # exclusive
+                    indexes_dict = {}
+                    indexes_dict['first_index'] = first_index
+                    indexes_dict['last_index'] = last_index
+                    VIDEO_NAME_DICT[video_name_ext] = indexes_dict
+                    IMAGE_PATH_LIST.extend((os.path.join(video_frames_path, frame) for frame in frame_list))
     last_img_index = len(IMAGE_PATH_LIST) - 1
 
     # create output directories
@@ -1046,21 +1057,6 @@ if __name__ == '__main__':
             if not os.path.exists(new_video_dir):
                 os.makedirs(new_video_dir)
 
-    # create empty annotation files for each image, if it doesn't exist already
-    for img_path in IMAGE_PATH_LIST:
-        # image info for the .xml file
-        test_img = cv2.imread(img_path)
-        abs_path = os.path.abspath(img_path)
-        folder_name = os.path.dirname(img_path)
-        image_name = os.path.basename(img_path)
-        img_height, img_width, depth = (str(number) for number in test_img.shape)
-
-        for ann_path in get_annotation_paths(img_path, annotation_formats):
-            if not os.path.isfile(ann_path):
-                if '.txt' in ann_path:
-                    open(ann_path, 'a').close()
-                elif '.xml' in ann_path:
-                    create_PASCAL_VOC_xml(ann_path, abs_path, folder_name, image_name, img_height, img_width, depth)
 
     # load class list
     with open('class_list.txt') as f:
