@@ -395,7 +395,7 @@ def draw_bbox_anchors(tmp_img, xmin, ymin, xmax, ymax, color):
         cv2.rectangle(tmp_img, (int(x1), int(y1)), (int(x2), int(y2)), color, -1)
     return tmp_img
 
-def draw_bboxes_from_file(tmp_img, annotation_paths, width, height):
+def draw_bboxes_from_file(tmp_img, annotation_paths, width, height, class_filter = None ):
     global img_objects#, is_bbox_selected, selected_bbox
     img_objects = []
     ann_path = None
@@ -414,15 +414,17 @@ def draw_bboxes_from_file(tmp_img, annotation_paths, width, height):
                 #print('{} {} {} {} {}'.format(class_index, xmin, ymin, xmax, ymax))
                 img_objects.append([class_index, xmin, ymin, xmax, ymax])
                 color = class_rgb[class_index].tolist()
-                # draw bbox
-                cv2.rectangle(tmp_img, (xmin, ymin), (xmax, ymax), color, LINE_THICKNESS)
+
                 # draw resizing anchors if the object is selected
                 if is_bbox_selected:
                     if idx == selected_bbox:
                         tmp_img = draw_bbox_anchors(tmp_img, xmin, ymin, xmax, ymax, color)
-                font = cv2.FONT_HERSHEY_SIMPLEX
-                if text_on:
-                    cv2.putText(tmp_img, class_name, (xmin, ymin - 5), font, 0.6, color, LINE_THICKNESS, cv2.LINE_AA)
+                # draw bbox
+                if class_filter is None or class_filter == class_index:
+                    cv2.rectangle(tmp_img, (xmin, ymin), (xmax, ymax), color, LINE_THICKNESS)
+                    if text_on:
+                        font = cv2.FONT_HERSHEY_SIMPLEX
+                        cv2.putText(tmp_img, class_name, (xmin, ymin - 5), font, 0.6, color, LINE_THICKNESS, cv2.LINE_AA)
         else:
             # Draw from YOLO
             with open(ann_path) as fp:
@@ -432,15 +434,18 @@ def draw_bboxes_from_file(tmp_img, annotation_paths, width, height):
                     #print('{} {} {} {} {}'.format(class_index, xmin, ymin, xmax, ymax))
                     img_objects.append([class_index, xmin, ymin, xmax, ymax])
                     color = class_rgb[class_index].tolist()
-                    # draw bbox
-                    cv2.rectangle(tmp_img, (xmin, ymin), (xmax, ymax), color, LINE_THICKNESS)
+
                     # draw resizing anchors if the object is selected
                     if is_bbox_selected:
                         if idx == selected_bbox:
                             tmp_img = draw_bbox_anchors(tmp_img, xmin, ymin, xmax, ymax, color)
-                    elif text_on:
-                        font = cv2.FONT_HERSHEY_SIMPLEX
-                        cv2.putText(tmp_img, class_name, (xmin, ymin - 5), font, 0.6, color, LINE_THICKNESS, cv2.LINE_AA)
+
+                    # draw bbox
+                    if class_filter is None or class_filter == class_index:
+                        cv2.rectangle(tmp_img, (xmin, ymin), (xmax, ymax), color, LINE_THICKNESS)
+                        if text_on:
+                            font = cv2.FONT_HERSHEY_SIMPLEX
+                            cv2.putText(tmp_img, class_name, (xmin, ymin - 5), font, 0.6, color, LINE_THICKNESS, cv2.LINE_AA)
     return tmp_img
 
 
@@ -1100,6 +1105,7 @@ if __name__ == '__main__':
     set_img_index(0)
     edges_on = False
     text_on = True
+    show_only_active_class = False
 
     display_text('Welcome!\n Press [h] for help.', 4000)
 
@@ -1129,7 +1135,11 @@ if __name__ == '__main__':
         if dragBBox.anchor_being_dragged is not None:
             dragBBox.handler_mouse_move(mouse_x, mouse_y)
         # draw already done bounding boxes
-        tmp_img = draw_bboxes_from_file(tmp_img, annotation_paths, width, height)
+        if not show_only_active_class:
+            class_filter = None
+        else:
+            class_filter = class_index
+        tmp_img = draw_bboxes_from_file(tmp_img, annotation_paths, width, height, class_filter)
         # if bounding box is selected add extra info
         if is_bbox_selected:
             tmp_img = draw_info_bb_selected(tmp_img)
@@ -1200,6 +1210,7 @@ if __name__ == '__main__':
                         '[a] or [d] to change Image;\n'
                         '[w] or [s] to change Class.\n'
                         '[t] to toggle text\n'
+                        '[c] to toggle inactive showing only active class bboxes\n'
                         )
                 display_text(text, 5000)
             # show edges key listener
@@ -1213,6 +1224,9 @@ if __name__ == '__main__':
             elif pressed_key == ord('t'):
                 text_on = not text_on
                 display_text( f"Text turned {'ON' if text_on else 'OFF'}!", 1000)
+            elif pressed_key == ord('c'):
+                show_only_active_class = not show_only_active_class
+                display_text( f"Show only active class bboxes turned {'ON' if show_only_active_class else 'OFF'}!", 1000)
             elif pressed_key == ord('p'):
                 # check if the image is a frame from a video
                 is_from_video, video_name = is_frame_from_video(img_path)
