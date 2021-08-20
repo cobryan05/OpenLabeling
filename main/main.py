@@ -627,7 +627,6 @@ def mouse_listener(event, x, y, flags, param):
     # mouse callback function
     global is_bbox_selected, prev_was_double_click, mouse_x, mouse_y, point_1, point_2
 
-    set_class = True
     if event == cv2.EVENT_MOUSEMOVE:
         mouse_x = x
         mouse_y = y
@@ -636,14 +635,20 @@ def mouse_listener(event, x, y, flags, param):
         #print('Double click')
         point_1 = (-1, -1)
         # if clicked inside a bounding box we set that bbox
-        set_selected_bbox(set_class)
+        set_selected_bbox(True)
     # By AlexeyGy: delete via right-click
     elif event == cv2.EVENT_RBUTTONDOWN:
-        set_class = False
-        set_selected_bbox(set_class)
+        set_selected_bbox(False)
         if is_bbox_selected:
             obj_to_edit = img_objects[selected_bbox]
             edit_bbox(obj_to_edit, 'delete')
+            is_bbox_selected = False
+    # Change class to current class via middle-click
+    elif event == cv2.EVENT_MBUTTONDOWN:
+        set_selected_bbox(False)
+        if is_bbox_selected:
+            obj_to_edit = img_objects[selected_bbox]
+            edit_bbox(obj_to_edit, f'change_class:{class_index}')
             is_bbox_selected = False
     elif event == cv2.EVENT_LBUTTONDOWN:
         if prev_was_double_click:
