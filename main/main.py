@@ -1267,9 +1267,8 @@ if __name__ == '__main__':
                 # show next image key listener
                 elif pressed_key == ord('d'):
                     img_index = increase_index(img_index, last_img_index)
-                set_img_index(img_index)
-                img_obj_bak = []
                 cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, img_index)
+                img_obj_bak = []
             elif pressed_key == ord('s') or pressed_key == ord('w'):
                 # change down current class key listener
                 if pressed_key == ord('s'):
