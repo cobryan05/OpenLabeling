@@ -9,9 +9,9 @@ from utils.general import non_max_suppression
 
 class YoloInference:
     def __init__(self, weights):
-        self._yolo = attempt_load( weights )
-        self._yolo.eval()
         self._device = torch.device('cpu')
+        self._yolo = attempt_load( weights, map_location=self._device )
+        self._yolo.eval()
 
 
     def runInference(self, img):
