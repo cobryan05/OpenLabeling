@@ -1239,6 +1239,7 @@ if __name__ == '__main__':
     img_obj_bak = []
     base_img = None
     redraw_needed = True
+    invert_image = False
 
     contours_on = False
     contour_thresh_low = 6
@@ -1262,6 +1263,9 @@ if __name__ == '__main__':
             if contours_on == True:
                 contour_thresh_high = auto_contour_threshold( base_img, low_thresh = contour_thresh_low )
                 base_img = draw_contours( base_img, contour_thresh_low, contour_thresh_high )
+
+            if invert_image:
+                base_img = cv2.bitwise_not(base_img)
 
             # draw already done bounding boxes
             if not show_only_active_class:
@@ -1343,6 +1347,9 @@ if __name__ == '__main__':
                 img_obj_bak = []
                 redraw_needed = True
             elif pressed_key == ord('r'):
+                redraw_needed = True
+            elif pressed_key == ord('i'):
+                invert_image = not invert_image
                 redraw_needed = True
             elif pressed_key == ord('g'):
                 contours_on = not contours_on
