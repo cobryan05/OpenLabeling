@@ -1085,6 +1085,51 @@ def complement_bgr(color):
     k = lo + hi
     return tuple(k - u for u in color)
 
+
+def auto_contour_threshold( img, stop_avg_mult_thresh = 1.05, start_test_val = 30, low_thresh = 5 ):
+    imgray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    this_change_perc = 0
+    change_sum = 0
+    change_cnt = 0
+
+    prev_cnt = None
+    ret_thresh = None
+
+    prev_test_val = start_test_val
+    for test_val in range( start_test_val, low_thresh, -2 ):
+        edge_img = cv2.Canny( imgray, low_thresh, test_val )
+        _, contours, _ = cv2.findContours(edge_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+        if prev_cnt is not None:
+            # How many contours are there, as a % of the previous value's count
+            this_change_perc = len(contours)/prev_cnt
+            change_sum += this_change_perc
+            change_cnt += 1
+
+            # How does this current % compare to the average %?
+            avg_change = change_sum / change_cnt
+            avg_mult = this_change_perc / avg_change
+
+            #print( f"{test_val} - Change is {this_change_perc}.  Avg {avg_change}   Mult: {avg_mult}")
+            # If the change greater than is 'stop_avg_mult_thresh' times the average then stop here
+            if avg_mult > stop_avg_mult_thresh:
+                ret_thresh = prev_test_val
+                break
+        prev_cnt = len(contours)
+        prev_test_val = test_val
+
+    return ret_thresh
+
+
+def draw_contours( img, thresh_low, thresh_high ):
+    imgray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    thresh = cv2.Canny( imgray, thresh_low, thresh_high )
+    im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    for contour in contours:
+        contour_img = cv2.drawContours(img, [contour], 0, (255,255,0), 1)
+    return contour_img
+
 # change to the directory of this script
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -1195,6 +1240,10 @@ if __name__ == '__main__':
     base_img = None
     redraw_needed = True
 
+    contours_on = False
+    contour_thresh_low = 6
+    contour_thresh_high = 14
+
     display_text('Welcome!\n Press [h] for help.', 4000)
 
     # loop
@@ -1209,6 +1258,10 @@ if __name__ == '__main__':
             if edges_on == True:
                 # draw edges
                 base_img = draw_edges(base_img)
+
+            if contours_on == True:
+                contour_thresh_high = auto_contour_threshold( base_img, low_thresh = contour_thresh_low )
+                base_img = draw_contours( base_img, contour_thresh_low, contour_thresh_high )
 
             # draw already done bounding boxes
             if not show_only_active_class:
@@ -1290,6 +1343,9 @@ if __name__ == '__main__':
                 img_obj_bak = []
                 redraw_needed = True
             elif pressed_key == ord('r'):
+                redraw_needed = True
+            elif pressed_key == ord('g'):
+                contours_on = not contours_on
                 redraw_needed = True
             elif pressed_key == ord('s') or pressed_key == ord('w'):
                 # change down current class key listener
