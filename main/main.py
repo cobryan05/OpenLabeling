@@ -44,7 +44,7 @@ args = parser.parse_args()
 
 class_index = 0
 img_index = 0
-img = None
+orig_img = None
 img_objects = []
 
 INPUT_DIR  = args.input_dir
@@ -146,6 +146,7 @@ class dragBBox:
 
     @staticmethod
     def handler_mouse_move(eX, eY):
+        global redraw_needed
         if dragBBox.selected_object is not None:
             class_name, x_left, y_top, x_right, y_bottom = dragBBox.selected_object
 
@@ -178,6 +179,7 @@ class dragBBox:
             if change_was_made:
                 action = "resize_bbox:{}:{}:{}:{}".format(x_left, y_top, x_right, y_bottom)
                 edit_bbox(dragBBox.selected_object, action)
+                redraw_needed = True
                 # update the selected bbox
                 dragBBox.selected_object = [class_name, x_left, y_top, x_right, y_bottom]
 
@@ -197,10 +199,10 @@ def display_text(text, time):
         print(text)
 
 def set_img_index(x):
-    global img_index, img
+    global img_index, orig_img
     img_index = x
     img_path = IMAGE_PATH_LIST[img_index]
-    img = cv2.imread(img_path)
+    orig_img = cv2.imread(img_path)
     text = 'Showing image {}/{}, path: {}'.format(str(img_index), str(last_img_index), img_path)
     display_text(text, 1000)
 
@@ -208,7 +210,7 @@ def set_img_index(x):
     abs_path = os.path.abspath(img_path)
     folder_name = os.path.dirname(img_path)
     image_name = os.path.basename(img_path)
-    img_height, img_width, depth = (str(number) for number in img.shape)
+    img_height, img_width, depth = (str(number) for number in orig_img.shape)
 
     for ann_path in get_annotation_paths(img_path, annotation_formats):
         if not os.path.isfile(ann_path):
@@ -297,6 +299,9 @@ def write_xml(xml_str, xml_path):
 
 
 def append_bb(ann_path, line, extension):
+    global redraw_needed
+    redraw_needed = True
+
     if '.txt' in extension:
         with open(ann_path, 'a') as myfile:
             myfile.write(line + '\n') # append line
@@ -625,7 +630,7 @@ def edit_bbox(obj_to_edit, action):
 
 def mouse_listener(event, x, y, flags, param):
     # mouse callback function
-    global is_bbox_selected, prev_was_double_click, mouse_x, mouse_y, point_1, point_2
+    global is_bbox_selected, prev_was_double_click, mouse_x, mouse_y, point_1, point_2, redraw_needed
 
     if event == cv2.EVENT_MOUSEMOVE:
         mouse_x = x
@@ -643,6 +648,7 @@ def mouse_listener(event, x, y, flags, param):
             obj_to_edit = img_objects[selected_bbox]
             edit_bbox(obj_to_edit, 'delete')
             is_bbox_selected = False
+            redraw_needed = True
     # Change class to current class via middle-click
     elif event == cv2.EVENT_MBUTTONDOWN:
         set_selected_bbox(False)
@@ -650,6 +656,7 @@ def mouse_listener(event, x, y, flags, param):
             obj_to_edit = img_objects[selected_bbox]
             edit_bbox(obj_to_edit, f'change_class:{class_index}')
             is_bbox_selected = False
+            redraw_needed = True
     elif event == cv2.EVENT_LBUTTONDOWN:
         if prev_was_double_click:
             #print('Finish double click')
@@ -1185,18 +1192,36 @@ if __name__ == '__main__':
     text_on = True
     show_only_active_class = False
     img_obj_bak = []
+    base_img = None
+    redraw_needed = True
 
     display_text('Welcome!\n Press [h] for help.', 4000)
 
     # loop
     while True:
         color = class_rgb[class_index].tolist()
-        # clone the img
-        tmp_img = img.copy()
-        height, width = tmp_img.shape[:2]
-        if edges_on == True:
-            # draw edges
-            tmp_img = draw_edges(tmp_img)
+
+        # Draw the image except the mouse
+        if redraw_needed:
+            redraw_needed = False
+            base_img = orig_img.copy()
+            height, width = base_img.shape[:2]
+            if edges_on == True:
+                # draw edges
+                base_img = draw_edges(base_img)
+
+            # draw already done bounding boxes
+            if not show_only_active_class:
+                class_filter = None
+            else:
+                class_filter = class_index
+
+            # get annotation paths
+            img_path = IMAGE_PATH_LIST[img_index]
+            annotation_paths = get_annotation_paths(img_path, annotation_formats)
+            base_img = draw_bboxes_from_file(base_img, annotation_paths, width, height, class_filter)
+
+        tmp_img = base_img.copy()
         # draw vertical and horizontal guide lines
         draw_line(tmp_img, mouse_x, mouse_y, height, width, color)
         # write selected class
@@ -1208,17 +1233,11 @@ if __name__ == '__main__':
         if text_on:
             tmp_img = cv2.rectangle(tmp_img, (mouse_x + LINE_THICKNESS, mouse_y - LINE_THICKNESS), (mouse_x + text_width + margin, mouse_y - text_height - margin), complement_bgr(color), -1)
             tmp_img = cv2.putText(tmp_img, class_name, (mouse_x + margin, mouse_y - margin), font, font_scale, color, LINE_THICKNESS, cv2.LINE_AA)
-        # get annotation paths
-        img_path = IMAGE_PATH_LIST[img_index]
-        annotation_paths = get_annotation_paths(img_path, annotation_formats)
+
+
         if dragBBox.anchor_being_dragged is not None:
             dragBBox.handler_mouse_move(mouse_x, mouse_y)
-        # draw already done bounding boxes
-        if not show_only_active_class:
-            class_filter = None
-        else:
-            class_filter = class_index
-        tmp_img = draw_bboxes_from_file(tmp_img, annotation_paths, width, height, class_filter)
+
         # if bounding box is selected add extra info
         if is_bbox_selected:
             tmp_img = draw_info_bb_selected(tmp_img)
@@ -1269,6 +1288,9 @@ if __name__ == '__main__':
                     img_index = increase_index(img_index, last_img_index)
                 cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, img_index)
                 img_obj_bak = []
+                redraw_needed = True
+            elif pressed_key == ord('r'):
+                redraw_needed = True
             elif pressed_key == ord('s') or pressed_key == ord('w'):
                 # change down current class key listener
                 if pressed_key == ord('s'):
@@ -1295,22 +1317,21 @@ if __name__ == '__main__':
                 display_text(text, 5000)
             # show edges key listener
             elif pressed_key == ord('e'):
-                if edges_on == True:
-                    edges_on = False
-                    display_text('Edges turned OFF!', 1000)
-                else:
-                    edges_on = True
-                    display_text('Edges turned ON!', 1000)
+                edges_on = not edges_on
+                display_text( f"Edges turned {'ON' if edges_on else 'OFF'}!", 1000)
+                redraw_needed = True
             elif pressed_key == ord('t'):
                 text_on = not text_on
                 display_text( f"Text turned {'ON' if text_on else 'OFF'}!", 1000)
+                redraw_needed = True
             elif pressed_key == ord('c'):
                 show_only_active_class = not show_only_active_class
                 display_text( f"Show only active class bboxes turned {'ON' if show_only_active_class else 'OFF'}!", 1000)
+                redraw_needed = True
             elif pressed_key == ord('y') and yolo is not None:
                 if len(img_obj_bak) == 0 :
                     img_obj_bak = clear_bboxes()
-                    img_objects = run_yolo( img, yolo )
+                    img_objects = run_yolo( orig_img, yolo )
                     restore_bboxes( tmp_img, annotation_paths, img_objects )
             elif pressed_key == ord('u'):
                 tmp = img_objects.copy()
@@ -1331,7 +1352,7 @@ if __name__ == '__main__':
                         # get list of frames following this image
                         next_frame_path_list = get_next_frame_path_list(video_name, img_path)
                         # initial frame
-                        init_frame = img.copy()
+                        init_frame = orig_img.copy()
                         label_tracker = LabelTracker(TRACKER_TYPE, init_frame, next_frame_path_list)
                         for obj in object_list:
                             class_index = obj[0]
