@@ -26,8 +26,13 @@ class YoloInference:
             yoloImg = yoloImg.unsqueeze(0)
         _,_,yoloImgH,yoloImgW = yoloImg.shape
 
+        conf_thres = 0.4
+        iou_thres=0.45  # NMS IOU threshold
+        classes = None
+        agnostic_nms = False
+        max_det = 5000
         preds = self._yolo(yoloImg)[0]
-        preds = non_max_suppression( preds )
+        preds = non_max_suppression( preds, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)
 
         results = []
         for pred in preds:
