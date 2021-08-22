@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 import czifile
 from tqdm import tqdm
+from sklearn.cluster import MiniBatchKMeans
 
 from lxml import etree
 import xml.etree.cElementTree as ET
@@ -1086,6 +1087,20 @@ def complement_bgr(color):
     return tuple(k - u for u in color)
 
 
+def get_dominant_mask( img, thresh=.05 ):
+    dominant_color = get_dominant_color( img )
+    mask = cv2.inRange( img, dominant_color * ( 1 - thresh ), dominant_color * ( 1 + thresh ) )
+    return mask
+
+
+def get_dominant_color( img ):
+    reshaped = img.reshape(-1,3)
+    kmeans = MiniBatchKMeans( n_clusters=3 ).fit(reshaped)
+    bins = np.bincount(kmeans.labels_)
+    dominant_idx = bins.argmax()
+    dominant_color = kmeans.cluster_centers_[dominant_idx].astype(np.int)
+    return dominant_color
+
 def auto_contour_threshold( img, stop_avg_mult_thresh = 1.05, start_test_val = 30, low_thresh = 5 ):
     imgray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
@@ -1121,6 +1136,11 @@ def auto_contour_threshold( img, stop_avg_mult_thresh = 1.05, start_test_val = 3
 
     return ret_thresh
 
+
+def draw_masked( img, mask_thresh=.05):
+    mask = get_dominant_mask( img, mask_thresh )
+    masked = cv2.bitwise_and( img, img, mask=mask )
+    return masked
 
 def draw_contours( img, thresh_low, thresh_high ):
     imgray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -1240,10 +1260,12 @@ if __name__ == '__main__':
     base_img = None
     redraw_needed = True
     invert_image = False
+    masked_on = False
 
     contours_on = False
     contour_thresh_low = 6
     contour_thresh_high = 14
+    contour_kmean_thresh = .05
 
     display_text('Welcome!\n Press [h] for help.', 4000)
 
@@ -1266,6 +1288,9 @@ if __name__ == '__main__':
 
             if invert_image:
                 base_img = cv2.bitwise_not(base_img)
+
+            if masked_on == True:
+                base_img = draw_masked(base_img, mask_thresh=contour_kmean_thresh )
 
             # draw already done bounding boxes
             if not show_only_active_class:
@@ -1353,6 +1378,9 @@ if __name__ == '__main__':
                 redraw_needed = True
             elif pressed_key == ord('g'):
                 contours_on = not contours_on
+                redraw_needed = True
+            elif pressed_key == ord('m'):
+                masked_on = not masked_on
                 redraw_needed = True
             elif pressed_key == ord('s') or pressed_key == ord('w'):
                 # change down current class key listener
