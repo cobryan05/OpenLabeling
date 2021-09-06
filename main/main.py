@@ -4,12 +4,15 @@ import glob
 import json
 import os
 import re
+import sys
 
 import cv2
 import numpy as np
 import czifile
 from tqdm import tqdm
 from sklearn.cluster import MiniBatchKMeans
+
+sys.path.append( os.path.join( os.path.dirname( __file__ ), "..", "submodules" ) )
 
 from lxml import etree
 import xml.etree.cElementTree as ET
@@ -1163,7 +1166,7 @@ if __name__ == '__main__':
 
     if args.yoloWeights:
         try:
-            from yoloInference import YoloInference
+            from trackerTools.yoloInference import YoloInference
             yolo = YoloInference( args.yoloWeights )
         except Exception as e:
             print(f"Failed to load YOLO model: {e}")
