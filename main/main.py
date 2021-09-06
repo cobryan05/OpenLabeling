@@ -679,7 +679,7 @@ def mouse_listener(event, x, y, flags, param):
                 if gPoint1[0] == -1:
                     if gIsBboxSelected:
                         if is_mouse_inside_delete_button():
-                            set_selected_bbox(set_class)
+                            set_selected_bbox(True)
                             obj_to_edit = gImgObjects[gSelectedBbox]
                             edit_bbox(obj_to_edit, 'delete')
                         gIsBboxSelected = False
