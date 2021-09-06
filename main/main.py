@@ -43,10 +43,10 @@ parser.add_argument('--tracker', default='KCF', type=str, help="tracker_type bei
 parser.add_argument('-n', '--n_frames', default='200', type=int, help='number of frames to track object for')
 args = parser.parse_args()
 
-class_index = 0
-img_index = 0
-orig_img = None
-img_objects = []
+gClassIdx = 0
+gImgIdx = 0
+gOrigImg = None
+gImgObjects = []
 
 INPUT_DIR  = args.input_dir
 OUTPUT_DIR = args.output_dir
@@ -67,16 +67,16 @@ TRACKER_DIR = os.path.join(OUTPUT_DIR, '.tracker')
 DRAW_FROM_PASCAL = args.draw_from_PASCAL_files
 
 # selected bounding box
-prev_was_double_click = False
-is_bbox_selected = False
-selected_bbox = -1
+gPrevWasDoubleClick = False
+gIsBboxSelected = False
+gSelectedBbox = -1
 LINE_THICKNESS = args.thickness
 ZOOM_RADIUS = 100
 
-mouse_x = 0
-mouse_y = 0
-point_1 = (-1, -1)
-point_2 = (-1, -1)
+gMouseX = 0
+gMouseY = 0
+gPoint1 = (-1, -1)
+gPoint2 = (-1, -1)
 
 '''
     0,0 ------> x (width)
@@ -147,7 +147,7 @@ class dragBBox:
 
     @staticmethod
     def handler_mouse_move(eX, eY):
-        global redraw_needed
+        global gRedrawNeeded
         if dragBBox.selected_object is not None:
             class_name, x_left, y_top, x_right, y_bottom = dragBBox.selected_object
 
@@ -180,7 +180,7 @@ class dragBBox:
             if change_was_made:
                 action = "resize_bbox:{}:{}:{}:{}".format(x_left, y_top, x_right, y_bottom)
                 edit_bbox(dragBBox.selected_object, action)
-                redraw_needed = True
+                gRedrawNeeded = True
                 # update the selected bbox
                 dragBBox.selected_object = [class_name, x_left, y_top, x_right, y_bottom]
 
@@ -200,18 +200,18 @@ def display_text(text, time):
         print(text)
 
 def set_img_index(x):
-    global img_index, orig_img
-    img_index = x
-    img_path = IMAGE_PATH_LIST[img_index]
-    orig_img = cv2.imread(img_path)
-    text = 'Showing image {}/{}, path: {}'.format(str(img_index), str(last_img_index), img_path)
+    global gImgIdx, gOrigImg
+    gImgIdx = x
+    img_path = IMAGE_PATH_LIST[gImgIdx]
+    gOrigImg = cv2.imread(img_path)
+    text = 'Showing image {}/{}, path: {}'.format(str(gImgIdx), str(last_img_index), img_path)
     display_text(text, 1000)
 
     # create empty annotation files for each image, if it doesn't exist already
     abs_path = os.path.abspath(img_path)
     folder_name = os.path.dirname(img_path)
     image_name = os.path.basename(img_path)
-    img_height, img_width, depth = (str(number) for number in orig_img.shape)
+    img_height, img_width, depth = (str(number) for number in gOrigImg.shape)
 
     for ann_path in get_annotation_paths(img_path, annotation_formats):
         if not os.path.isfile(ann_path):
@@ -222,9 +222,9 @@ def set_img_index(x):
 
 
 def set_class_index(x):
-    global class_index
-    class_index = x
-    text = 'Selected class {}/{} -> {}'.format(str(class_index), str(last_class_index), CLASS_LIST[class_index])
+    global gClassIdx
+    gClassIdx = x
+    text = 'Selected class {}/{} -> {}'.format(str(gClassIdx), str(last_class_index), CLASS_LIST[gClassIdx])
     display_text(text, 3000)
 
 
@@ -280,7 +280,7 @@ def findIndex(obj_to_find):
     ind = -1
 
     ind_ = 0
-    for listElem in img_objects:
+    for listElem in gImgObjects:
         if listElem == obj_to_find:
             ind = ind_
             return ind
@@ -300,8 +300,8 @@ def write_xml(xml_str, xml_path):
 
 
 def append_bb(ann_path, line, extension):
-    global redraw_needed
-    redraw_needed = True
+    global gRedrawNeeded
+    gRedrawNeeded = True
 
     if '.txt' in extension:
         with open(ann_path, 'a') as myfile:
@@ -402,8 +402,8 @@ def draw_bbox_anchors(tmp_img, xmin, ymin, xmax, ymax, color):
     return tmp_img
 
 def draw_bboxes_from_file(tmp_img, annotation_paths, width, height, class_filter = None ):
-    global img_objects#, is_bbox_selected, selected_bbox
-    img_objects = []
+    global gImgObjects#, is_bbox_selected, selected_bbox
+    gImgObjects = []
     ann_path = None
     if DRAW_FROM_PASCAL:
         # Drawing bounding boxes from the PASCAL files
@@ -418,12 +418,12 @@ def draw_bboxes_from_file(tmp_img, annotation_paths, width, height, class_filter
             for idx, obj in enumerate(annotation.findall('object')):
                 class_name, class_index, xmin, ymin, xmax, ymax = get_xml_object_data(obj)
                 #print('{} {} {} {} {}'.format(class_index, xmin, ymin, xmax, ymax))
-                img_objects.append([class_index, xmin, ymin, xmax, ymax])
+                gImgObjects.append([class_index, xmin, ymin, xmax, ymax])
                 color = class_rgb[class_index].tolist()
 
                 # draw resizing anchors if the object is selected
-                if is_bbox_selected:
-                    if idx == selected_bbox:
+                if gIsBboxSelected:
+                    if idx == gSelectedBbox:
                         tmp_img = draw_bbox_anchors(tmp_img, xmin, ymin, xmax, ymax, color)
                 # draw bbox
                 if class_filter is None or class_filter == class_index:
@@ -438,12 +438,12 @@ def draw_bboxes_from_file(tmp_img, annotation_paths, width, height, class_filter
                     obj = line
                     class_name, class_index, xmin, ymin, xmax, ymax = get_txt_object_data(obj, width, height)
                     #print('{} {} {} {} {}'.format(class_index, xmin, ymin, xmax, ymax))
-                    img_objects.append([class_index, xmin, ymin, xmax, ymax])
+                    gImgObjects.append([class_index, xmin, ymin, xmax, ymax])
                     color = class_rgb[class_index].tolist()
 
                     # draw resizing anchors if the object is selected
-                    if is_bbox_selected:
-                        if idx == selected_bbox:
+                    if gIsBboxSelected:
+                        if idx == gSelectedBbox:
                             tmp_img = draw_bbox_anchors(tmp_img, xmin, ymin, xmax, ymax, color)
 
                     # draw bbox
@@ -462,32 +462,32 @@ def get_bbox_area(x1, y1, x2, y2):
 
 
 def set_selected_bbox(set_class):
-    global is_bbox_selected, selected_bbox
+    global gIsBboxSelected, gSelectedBbox
     smallest_area = -1
     # if clicked inside multiple bboxes selects the smallest one
-    for idx, obj in enumerate(img_objects):
+    for idx, obj in enumerate(gImgObjects):
         ind, x1, y1, x2, y2 = obj
         x1 = x1 - dragBBox.sRA
         y1 = y1 - dragBBox.sRA
         x2 = x2 + dragBBox.sRA
         y2 = y2 + dragBBox.sRA
-        if pointInRect(mouse_x, mouse_y, x1, y1, x2, y2):
-            is_bbox_selected = True
+        if pointInRect(gMouseX, gMouseY, x1, y1, x2, y2):
+            gIsBboxSelected = True
             tmp_area = get_bbox_area(x1, y1, x2, y2)
             if tmp_area < smallest_area or smallest_area == -1:
                 smallest_area = tmp_area
-                selected_bbox = idx
+                gSelectedBbox = idx
                 if set_class:
                     # set class to the one of the selected bounding box
                     cv2.setTrackbarPos(TRACKBAR_CLASS, WINDOW_NAME, ind)
 
 
 def is_mouse_inside_delete_button():
-    for idx, obj in enumerate(img_objects):
-        if idx == selected_bbox:
+    for idx, obj in enumerate(gImgObjects):
+        if idx == gSelectedBbox:
             _ind, x1, y1, x2, y2 = obj
             x1_c, y1_c, x2_c, y2_c = get_close_icon(x1, y1, x2, y2)
-            if pointInRect(mouse_x, mouse_y, x1_c, y1_c, x2_c, y2_c):
+            if pointInRect(gMouseX, gMouseY, x1_c, y1_c, x2_c, y2_c):
                 return True
     return False
 
@@ -508,7 +508,7 @@ def edit_bbox(obj_to_edit, action):
     # 1. initialize bboxes_to_edit_dict
     #    (we use a dict since a single label can be associated with multiple ones in videos)
     bboxes_to_edit_dict = {}
-    current_img_path = IMAGE_PATH_LIST[img_index]
+    current_img_path = IMAGE_PATH_LIST[gImgIdx]
     bboxes_to_edit_dict[current_img_path] = obj_to_edit
 
     # 2. add elements to bboxes_to_edit_dict
@@ -631,62 +631,63 @@ def edit_bbox(obj_to_edit, action):
 
 def mouse_listener(event, x, y, flags, param):
     # mouse callback function
-    global is_bbox_selected, prev_was_double_click, mouse_x, mouse_y, point_1, point_2, redraw_needed
+    global gIsBboxSelected, gPrevWasDoubleClick, gMouseX, gMouseY, gPoint1, gPoint2, gRedrawNeeded, gOrigImg
 
     if event == cv2.EVENT_MOUSEMOVE:
-        mouse_x = x
-        mouse_y = y
+        gMouseX = x
+        gMouseY = y
     elif event == cv2.EVENT_LBUTTONDBLCLK:
-        prev_was_double_click = True
+        gPrevWasDoubleClick = True
         #print('Double click')
-        point_1 = (-1, -1)
+        gPoint1 = (-1, -1)
         # if clicked inside a bounding box we set that bbox
         set_selected_bbox(True)
     # By AlexeyGy: delete via right-click
     elif event == cv2.EVENT_RBUTTONDOWN:
         set_selected_bbox(False)
-        if is_bbox_selected:
-            obj_to_edit = img_objects[selected_bbox]
+        if gIsBboxSelected:
+            obj_to_edit = gImgObjects[gSelectedBbox]
             edit_bbox(obj_to_edit, 'delete')
-            is_bbox_selected = False
-            redraw_needed = True
+            gIsBboxSelected = False
+            gRedrawNeeded = True
     # Change class to current class via middle-click
     elif event == cv2.EVENT_MBUTTONDOWN:
         set_selected_bbox(False)
-        if is_bbox_selected:
-            obj_to_edit = img_objects[selected_bbox]
-            edit_bbox(obj_to_edit, f'change_class:{class_index}')
-            is_bbox_selected = False
-            redraw_needed = True
+        if gIsBboxSelected:
+            obj_to_edit = gImgObjects[gSelectedBbox]
+            edit_bbox(obj_to_edit, f'change_class:{gClassIdx}')
+            gIsBboxSelected = False
+            gRedrawNeeded = True
+
     elif event == cv2.EVENT_LBUTTONDOWN:
-        if prev_was_double_click:
+        if gPrevWasDoubleClick:
             #print('Finish double click')
-            prev_was_double_click = False
+            gPrevWasDoubleClick = False
         else:
             #print('Normal left click')
 
             # Check if mouse inside on of resizing anchors of the selected bbox
-            if is_bbox_selected:
-                dragBBox.handler_left_mouse_down(x, y, img_objects[selected_bbox])
+            if gIsBboxSelected:
+                dragBBox.handler_left_mouse_down(x, y, gImgObjects[gSelectedBbox])
 
             if dragBBox.anchor_being_dragged is None:
-                if point_1[0] == -1:
-                    if is_bbox_selected:
+                if gPoint1[0] == -1:
+                    if gIsBboxSelected:
                         if is_mouse_inside_delete_button():
                             set_selected_bbox(set_class)
-                            obj_to_edit = img_objects[selected_bbox]
+                            obj_to_edit = gImgObjects[gSelectedBbox]
                             edit_bbox(obj_to_edit, 'delete')
-                        is_bbox_selected = False
+                        gIsBboxSelected = False
                     else:
                         # first click (start drawing a bounding box or delete an item)
 
-                        point_1 = (x, y)
+                        gPoint1 = (x, y)
                 else:
                     # minimal size for bounding box to avoid errors
                     threshold = 5
-                    if abs(x - point_1[0]) > threshold or abs(y - point_1[1]) > threshold:
+                    if abs(x - gPoint1[0]) > threshold or abs(y - gPoint1[1]) > threshold:
                         # second click
-                        point_2 = (x, y)
+                        gPoint2 = (x, y)
 
     elif event == cv2.EVENT_LBUTTONUP:
         if dragBBox.anchor_being_dragged is not None:
@@ -713,7 +714,7 @@ def draw_close_icon(tmp_img, x1_c, y1_c, x2_c, y2_c):
 
 
 def draw_info_bb_selected(tmp_img):
-    for idx, obj in enumerate(img_objects):
+    for idx, obj in enumerate(gImgObjects):
         ind, x1, y1, x2, y2 = obj
         # if idx == selected_bbox:
         #     x1_c, y1_c, x2_c, y2_c = get_close_icon(x1, y1, x2, y2)
@@ -999,12 +1000,12 @@ class LabelTracker():
                 xmin, ymin, w, h = map(int, bbox)
                 xmax = xmin + w
                 ymax = ymin + h
-                obj = [class_index, xmin, ymin, xmax, ymax]
+                obj = [gClassIdx, xmin, ymin, xmax, ymax]
                 frame_data_dict = json_file_add_object(frame_data_dict, frame_path, anchor_id, pred_counter, obj)
                 cv2.rectangle(next_image, (xmin, ymin), (xmax, ymax), color, LINE_THICKNESS)
                 # save prediction
                 annotation_paths = get_annotation_paths(frame_path, annotation_formats)
-                save_bounding_box(annotation_paths, class_index, (xmin, ymin), (xmax, ymax), self.img_w, self.img_h)
+                save_bounding_box(annotation_paths, gClassIdx, (xmin, ymin), (xmax, ymax), self.img_w, self.img_h)
                 # show prediction
                 cv2.imshow(WINDOW_NAME, next_image)
                 pressed_key = cv2.waitKey(DELAY)
@@ -1019,14 +1020,14 @@ class LabelTracker():
 
 # Backup current annotations and then clear them
 def clear_bboxes():
-    global img_objects, img_index
-    img_objects_bak = img_objects.copy()
+    global gImgObjects, gImgIdx
+    img_objects_bak = gImgObjects.copy()
 
-    img_path = IMAGE_PATH_LIST[img_index]
+    img_path = IMAGE_PATH_LIST[gImgIdx]
     for path in get_annotation_paths(img_path, annotation_formats):
         if os.path.exists( path ):
             os.remove( path )
-    set_img_index( img_index )
+    set_img_index( gImgIdx )
     return img_objects_bak
 
 
@@ -1258,7 +1259,7 @@ if __name__ == '__main__':
     show_only_active_class = False
     img_obj_bak = []
     base_img = None
-    redraw_needed = True
+    gRedrawNeeded = True
     invert_image = False
     masked_on = False
 
@@ -1266,17 +1267,20 @@ if __name__ == '__main__':
     contour_thresh_low = 6
     contour_thresh_high = 14
     contour_kmean_thresh = .05
+    global thresh_high_offset, thresh_low_offset
+    thresh_high_offset = 0
+    thresh_low_offset = 0
 
     display_text('Welcome!\n Press [h] for help.', 4000)
 
     # loop
     while True:
-        color = class_rgb[class_index].tolist()
+        color = class_rgb[gClassIdx].tolist()
 
         # Draw the image except the mouse
-        if redraw_needed:
-            redraw_needed = False
-            base_img = orig_img.copy()
+        if gRedrawNeeded:
+            gRedrawNeeded = False
+            base_img = gOrigImg.copy()
             height, width = base_img.shape[:2]
             if edges_on == True:
                 # draw edges
@@ -1296,50 +1300,50 @@ if __name__ == '__main__':
             if not show_only_active_class:
                 class_filter = None
             else:
-                class_filter = class_index
+                class_filter = gClassIdx
 
             # get annotation paths
-            img_path = IMAGE_PATH_LIST[img_index]
+            img_path = IMAGE_PATH_LIST[gImgIdx]
             annotation_paths = get_annotation_paths(img_path, annotation_formats)
             base_img = draw_bboxes_from_file(base_img, annotation_paths, width, height, class_filter)
 
         tmp_img = base_img.copy()
         # draw vertical and horizontal guide lines
-        draw_line(tmp_img, mouse_x, mouse_y, height, width, color)
+        draw_line(tmp_img, gMouseX, gMouseY, height, width, color)
         # write selected class
-        class_name = CLASS_LIST[class_index]
+        class_name = CLASS_LIST[gClassIdx]
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_scale = 0.6
         margin = 3
         text_width, text_height = cv2.getTextSize(class_name, font, font_scale, LINE_THICKNESS)[0]
         if text_on:
-            tmp_img = cv2.rectangle(tmp_img, (mouse_x + LINE_THICKNESS, mouse_y - LINE_THICKNESS), (mouse_x + text_width + margin, mouse_y - text_height - margin), complement_bgr(color), -1)
-            tmp_img = cv2.putText(tmp_img, class_name, (mouse_x + margin, mouse_y - margin), font, font_scale, color, LINE_THICKNESS, cv2.LINE_AA)
+            tmp_img = cv2.rectangle(tmp_img, (gMouseX + LINE_THICKNESS, gMouseY - LINE_THICKNESS), (gMouseX + text_width + margin, gMouseY - text_height - margin), complement_bgr(color), -1)
+            tmp_img = cv2.putText(tmp_img, class_name, (gMouseX + margin, gMouseY - margin), font, font_scale, color, LINE_THICKNESS, cv2.LINE_AA)
 
 
         if dragBBox.anchor_being_dragged is not None:
-            dragBBox.handler_mouse_move(mouse_x, mouse_y)
+            dragBBox.handler_mouse_move(gMouseX, gMouseY)
 
         # if bounding box is selected add extra info
-        if is_bbox_selected:
+        if gIsBboxSelected:
             tmp_img = draw_info_bb_selected(tmp_img)
         # if first click
-        if point_1[0] != -1:
+        if gPoint1[0] != -1:
             # draw partial bbox
-            cv2.rectangle(tmp_img, point_1, (mouse_x, mouse_y), color, LINE_THICKNESS)
+            cv2.rectangle(tmp_img, gPoint1, (gMouseX, gMouseY), color, LINE_THICKNESS)
             # if second click
-            if point_2[0] != -1:
+            if gPoint2[0] != -1:
                 # save the bounding box
-                save_bounding_box(annotation_paths, class_index, point_1, point_2, width, height)
+                save_bounding_box(annotation_paths, gClassIdx, gPoint1, gPoint2, width, height)
                 # reset the points
-                point_1 = (-1, -1)
-                point_2 = (-1, -1)
+                gPoint1 = (-1, -1)
+                gPoint2 = (-1, -1)
 
         cv2.imshow(WINDOW_NAME, tmp_img)
 
         img_y, img_x, _ = tmp_img.shape
-        crop_left = mouse_x - ZOOM_RADIUS
-        crop_right = mouse_x + ZOOM_RADIUS
+        crop_left = gMouseX - ZOOM_RADIUS
+        crop_right = gMouseX + ZOOM_RADIUS
         if crop_left < 0:
             crop_left = 0
             crop_right = min( 2*ZOOM_RADIUS, img_x )
@@ -1347,8 +1351,8 @@ if __name__ == '__main__':
             crop_right = img_x
             crop_left = max( crop_right - 2*ZOOM_RADIUS, 0 )
 
-        crop_top = mouse_y - ZOOM_RADIUS
-        crop_bottom = mouse_y + ZOOM_RADIUS
+        crop_top = gMouseY - ZOOM_RADIUS
+        crop_bottom = gMouseY + ZOOM_RADIUS
         if crop_top < 0:
             crop_top = 0
             crop_bottom = min( 2*ZOOM_RADIUS, img_y )
@@ -1364,37 +1368,37 @@ if __name__ == '__main__':
             if pressed_key == ord('a') or pressed_key == ord('d'):
                 # show previous image key listener
                 if pressed_key == ord('a'):
-                    img_index = decrease_index(img_index, last_img_index)
+                    gImgIdx = decrease_index(gImgIdx, last_img_index)
                 # show next image key listener
                 elif pressed_key == ord('d'):
-                    img_index = increase_index(img_index, last_img_index)
-                cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, img_index)
+                    gImgIdx = increase_index(gImgIdx, last_img_index)
+                cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, gImgIdx)
                 img_obj_bak = []
-                redraw_needed = True
+                gRedrawNeeded = True
             elif pressed_key == ord('r'):
-                redraw_needed = True
+                gRedrawNeeded = True
             elif pressed_key == ord('i'):
                 invert_image = not invert_image
-                redraw_needed = True
+                gRedrawNeeded = True
             elif pressed_key == ord('g'):
                 contours_on = not contours_on
-                redraw_needed = True
+                gRedrawNeeded = True
             elif pressed_key == ord('m'):
                 masked_on = not masked_on
-                redraw_needed = True
+                gRedrawNeeded = True
             elif pressed_key == ord('s') or pressed_key == ord('w'):
                 # change down current class key listener
                 if pressed_key == ord('s'):
-                    class_index = decrease_index(class_index, last_class_index)
+                    gClassIdx = decrease_index(gClassIdx, last_class_index)
                 # change up current class key listener
                 elif pressed_key == ord('w'):
-                    class_index = increase_index(class_index, last_class_index)
-                draw_line(tmp_img, mouse_x, mouse_y, height, width, color)
-                set_class_index(class_index)
-                cv2.setTrackbarPos(TRACKBAR_CLASS, WINDOW_NAME, class_index)
-                if is_bbox_selected:
-                    obj_to_edit = img_objects[selected_bbox]
-                    edit_bbox(obj_to_edit, 'change_class:{}'.format(class_index))
+                    gClassIdx = increase_index(gClassIdx, last_class_index)
+                draw_line(tmp_img, gMouseX, gMouseY, height, width, color)
+                set_class_index(gClassIdx)
+                cv2.setTrackbarPos(TRACKBAR_CLASS, WINDOW_NAME, gClassIdx)
+                if gIsBboxSelected:
+                    obj_to_edit = gImgObjects[gSelectedBbox]
+                    edit_bbox(obj_to_edit, 'change_class:{}'.format(gClassIdx))
             # help key listener
             elif pressed_key == ord('h'):
                 text = ('[e] to show edges;\n'
@@ -1410,22 +1414,22 @@ if __name__ == '__main__':
             elif pressed_key == ord('e'):
                 edges_on = not edges_on
                 display_text( f"Edges turned {'ON' if edges_on else 'OFF'}!", 1000)
-                redraw_needed = True
+                gRedrawNeeded = True
             elif pressed_key == ord('t'):
                 text_on = not text_on
                 display_text( f"Text turned {'ON' if text_on else 'OFF'}!", 1000)
-                redraw_needed = True
+                gRedrawNeeded = True
             elif pressed_key == ord('c'):
                 show_only_active_class = not show_only_active_class
                 display_text( f"Show only active class bboxes turned {'ON' if show_only_active_class else 'OFF'}!", 1000)
-                redraw_needed = True
+                gRedrawNeeded = True
             elif pressed_key == ord('y') and yolo is not None:
                 if len(img_obj_bak) == 0 :
                     img_obj_bak = clear_bboxes()
-                    img_objects = run_yolo( orig_img, yolo )
-                    restore_bboxes( tmp_img, annotation_paths, img_objects )
+                    gImgObjects = run_yolo( gOrigImg, yolo )
+                    restore_bboxes( tmp_img, annotation_paths, gImgObjects )
             elif pressed_key == ord('u'):
-                tmp = img_objects.copy()
+                tmp = gImgObjects.copy()
                 restore_bboxes( tmp_img, annotation_paths, img_obj_bak)
                 img_obj_bak = tmp
             elif pressed_key == ord('p'):
@@ -1433,7 +1437,7 @@ if __name__ == '__main__':
                 is_from_video, video_name = is_frame_from_video(img_path)
                 if is_from_video:
                     # get list of objects associated to that frame
-                    object_list = img_objects[:]
+                    object_list = gImgObjects[:]
                     # remove the objects in that frame that are already in the `.json` file
                     json_file_path = '{}.json'.format(os.path.join(TRACKER_DIR, video_name))
                     file_exists, json_file_data = get_json_file_data(json_file_path)
@@ -1443,11 +1447,11 @@ if __name__ == '__main__':
                         # get list of frames following this image
                         next_frame_path_list = get_next_frame_path_list(video_name, img_path)
                         # initial frame
-                        init_frame = orig_img.copy()
+                        init_frame = gOrigImg.copy()
                         label_tracker = LabelTracker(TRACKER_TYPE, init_frame, next_frame_path_list)
                         for obj in object_list:
-                            class_index = obj[0]
-                            color = class_rgb[class_index].tolist()
+                            gClassIdx = obj[0]
+                            color = class_rgb[gClassIdx].tolist()
                             label_tracker.start_tracker(json_file_data, json_file_path, img_path, obj, color, annotation_formats)
             # quit key listener
             elif pressed_key == ord('q'):
