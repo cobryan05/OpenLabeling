@@ -225,6 +225,32 @@ def set_img_index(x):
             elif '.xml' in ann_path:
                 create_PASCAL_VOC_xml(ann_path, abs_path, folder_name, image_name, img_height, img_width, depth)
 
+def get_vid_img_index( curIdx, dir, lastIdx ):
+    startIdx = curIdx
+    if dir > 0:
+        op = increase_index
+    elif dir < 0:
+        op = decrease_index
+    else:
+        return startIdx
+
+    prev_video_name = None
+    while True:
+        img_path = IMAGE_PATH_LIST[curIdx]
+        is_from_video, video_name = is_frame_from_video(img_path)
+
+        # If video name changed, then break
+        if prev_video_name is not None and video_name != prev_video_name:
+            break
+
+        curIdx = op( curIdx, lastIdx )
+
+        # If looped around or not a video, then break
+        if curIdx == startIdx or not is_from_video:
+            break
+        prev_video_name = video_name
+    return curIdx
+
 
 def set_class_index(x):
     global gClassIdx
@@ -827,9 +853,9 @@ def save_bounding_box(annotation_paths, class_index, point_1, point_2, width, he
             append_bb(ann_path, line, '.xml')
 
 def is_frame_from_video(img_path):
+    img_path_parts = os.path.normpath(img_path).split(os.sep)
     for video_name in VIDEO_NAME_DICT:
-        video_dir = os.path.join(INPUT_DIR, video_name)
-        if os.path.dirname(img_path) == video_dir:
+        if video_name in img_path_parts:
             # image belongs to a video
             return True, video_name
     return False, None
@@ -1371,13 +1397,17 @@ if __name__ == '__main__':
 
         if dragBBox.anchor_being_dragged is None:
             ''' Key Listeners START '''
-            if pressed_key == ord('a') or pressed_key == ord('d'):
+            if pressed_key == ord('A') or pressed_key == ord('a') or pressed_key == ord('D') or pressed_key == ord('d'):
                 # show previous image key listener
                 if pressed_key == ord('a'):
                     gImgIdx = decrease_index(gImgIdx, last_img_index)
+                elif pressed_key == ord('A'):
+                    gImgIdx = get_vid_img_index( gImgIdx, -1, last_img_index )
                 # show next image key listener
                 elif pressed_key == ord('d'):
                     gImgIdx = increase_index(gImgIdx, last_img_index)
+                elif pressed_key == ord('D'):
+                    gImgIdx = get_vid_img_index( gImgIdx, 1, last_img_index )
                 cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, gImgIdx)
                 img_obj_bak = []
                 gRedrawNeeded = True
@@ -1414,6 +1444,7 @@ if __name__ == '__main__':
                 text = ('[e] to show edges;\n'
                         '[q] to quit;\n'
                         '[a] or [d] to change Image;\n'
+                        '[A] or [D] to change Video;\n'
                         '[w] or [s] to change Class.\n'
                         '[t] to toggle text\n'
                         '[c] to toggle inactive showing only active class bboxes\n'
