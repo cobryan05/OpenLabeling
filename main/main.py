@@ -72,6 +72,8 @@ gIsBboxSelected = False
 gSelectedBbox = -1
 LINE_THICKNESS = args.thickness
 ZOOM_RADIUS = 100
+ZOOM_STEP = 5
+ZOOM_MIN = 50
 
 gMouseX = 0
 gMouseY = 0
@@ -1270,6 +1272,7 @@ if __name__ == '__main__':
     global thresh_high_offset, thresh_low_offset
     thresh_high_offset = 0
     thresh_low_offset = 0
+    zoom_radius = ZOOM_RADIUS
 
     display_text('Welcome!\n Press [h] for help.', 4000)
 
@@ -1342,23 +1345,23 @@ if __name__ == '__main__':
         cv2.imshow(WINDOW_NAME, tmp_img)
 
         img_y, img_x, _ = tmp_img.shape
-        crop_left = gMouseX - ZOOM_RADIUS
-        crop_right = gMouseX + ZOOM_RADIUS
+        crop_left = gMouseX - zoom_radius
+        crop_right = gMouseX + zoom_radius
         if crop_left < 0:
             crop_left = 0
-            crop_right = min( 2*ZOOM_RADIUS, img_x )
+            crop_right = min( 2*zoom_radius, img_x )
         elif crop_right > img_x:
             crop_right = img_x
-            crop_left = max( crop_right - 2*ZOOM_RADIUS, 0 )
+            crop_left = max( crop_right - 2*zoom_radius, 0 )
 
-        crop_top = gMouseY - ZOOM_RADIUS
-        crop_bottom = gMouseY + ZOOM_RADIUS
+        crop_top = gMouseY - zoom_radius
+        crop_bottom = gMouseY + zoom_radius
         if crop_top < 0:
             crop_top = 0
-            crop_bottom = min( 2*ZOOM_RADIUS, img_y )
+            crop_bottom = min( 2*zoom_radius, img_y )
         elif crop_bottom > img_y:
             crop_bottom = img_y
-            crop_top = max( crop_bottom - 2*ZOOM_RADIUS, 0)
+            crop_top = max( crop_bottom - 2*zoom_radius, 0)
         cv2.imshow(ZOOM_WINDOW_NAME, tmp_img[crop_top:crop_bottom, crop_left:crop_right])
 
         pressed_key = cv2.waitKey(DELAY)
@@ -1380,6 +1383,10 @@ if __name__ == '__main__':
             elif pressed_key == ord('i'):
                 invert_image = not invert_image
                 gRedrawNeeded = True
+            elif pressed_key == ord('1'):
+                zoom_radius += ZOOM_STEP
+            elif pressed_key == ord('3'):
+                zoom_radius = max( ZOOM_MIN, zoom_radius - ZOOM_STEP )
             elif pressed_key == ord('g'):
                 contours_on = not contours_on
                 gRedrawNeeded = True
@@ -1408,6 +1415,7 @@ if __name__ == '__main__':
                         '[t] to toggle text\n'
                         '[c] to toggle inactive showing only active class bboxes\n'
                         '[y] to clear bboxes and run yolo inference\n'
+                        '[1|3] zoom in|zoom out\n'
                         )
                 display_text(text, 5000)
             # show edges key listener
