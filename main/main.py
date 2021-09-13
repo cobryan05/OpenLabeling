@@ -493,7 +493,7 @@ def get_bbox_area(x1, y1, x2, y2):
 
 
 def set_selected_bbox(set_class):
-    global gIsBboxSelected, gSelectedBbox
+    global gIsBboxSelected, gSelectedBbox, gRedrawNeeded
     smallest_area = -1
     # if clicked inside multiple bboxes selects the smallest one
     for idx, obj in enumerate(gImgObjects):
@@ -504,6 +504,7 @@ def set_selected_bbox(set_class):
         y2 = y2 + dragBBox.sRA
         if pointInRect(gMouseX, gMouseY, x1, y1, x2, y2):
             gIsBboxSelected = True
+            gRedrawNeeded = True
             tmp_area = get_bbox_area(x1, y1, x2, y2)
             if tmp_area < smallest_area or smallest_area == -1:
                 smallest_area = tmp_area
