@@ -433,15 +433,20 @@ def draw_bbox_anchors(tmp_img, xmin, ymin, xmax, ymax, color):
     return tmp_img
 
 def draw_bboxes_from_file(tmp_img, annotation_paths, width, height, class_filter = None ):
-    global gImgObjects#, is_bbox_selected, selected_bbox
-    gImgObjects = []
+    global gImgObjects
+    gImgObjects = read_objects_from_file( annotation_paths )
+    return draw_bboxes( tmp_img, gImgObjects, class_filter = class_filter)
+
+def read_objects_from_file( annotation_paths ):
+    fileObjects = []
     ann_path = None
     if DRAW_FROM_PASCAL:
-        # Drawing bounding boxes from the PASCAL files
+        # Read objects from PASCAL file
         ann_path = next(path for path in annotation_paths if 'PASCAL_VOC' in path)
     else:
-        # Drawing bounding boxes from the YOLO files
+        # Read objects from YOLO file
         ann_path = next(path for path in annotation_paths if 'YOLO_darknet' in path)
+
     if os.path.isfile(ann_path):
         if DRAW_FROM_PASCAL:
             tree = ET.parse(ann_path)
@@ -449,19 +454,7 @@ def draw_bboxes_from_file(tmp_img, annotation_paths, width, height, class_filter
             for idx, obj in enumerate(annotation.findall('object')):
                 class_name, class_index, xmin, ymin, xmax, ymax = get_xml_object_data(obj)
                 #print('{} {} {} {} {}'.format(class_index, xmin, ymin, xmax, ymax))
-                gImgObjects.append([class_index, xmin, ymin, xmax, ymax])
-                color = class_rgb[class_index].tolist()
-
-                # draw resizing anchors if the object is selected
-                if gIsBboxSelected:
-                    if idx == gSelectedBbox:
-                        tmp_img = draw_bbox_anchors(tmp_img, xmin, ymin, xmax, ymax, color)
-                # draw bbox
-                if class_filter is None or class_filter == class_index:
-                    cv2.rectangle(tmp_img, (xmin, ymin), (xmax, ymax), color, LINE_THICKNESS)
-                    if text_on:
-                        font = cv2.FONT_HERSHEY_SIMPLEX
-                        cv2.putText(tmp_img, class_name, (xmin, ymin - 5), font, 0.6, color, LINE_THICKNESS, cv2.LINE_AA)
+                fileObjects.append([class_index, xmin, ymin, xmax, ymax])
         else:
             # Draw from YOLO
             with open(ann_path) as fp:
@@ -469,21 +462,28 @@ def draw_bboxes_from_file(tmp_img, annotation_paths, width, height, class_filter
                     obj = line
                     class_name, class_index, xmin, ymin, xmax, ymax = get_txt_object_data(obj, width, height)
                     #print('{} {} {} {} {}'.format(class_index, xmin, ymin, xmax, ymax))
-                    gImgObjects.append([class_index, xmin, ymin, xmax, ymax])
-                    color = class_rgb[class_index].tolist()
+                    fileObjects.append([class_index, xmin, ymin, xmax, ymax])
+    return fileObjects
 
-                    # draw resizing anchors if the object is selected
-                    if gIsBboxSelected:
-                        if idx == gSelectedBbox:
-                            tmp_img = draw_bbox_anchors(tmp_img, xmin, ymin, xmax, ymax, color)
 
-                    # draw bbox
-                    if class_filter is None or class_filter == class_index:
-                        cv2.rectangle(tmp_img, (xmin, ymin), (xmax, ymax), color, LINE_THICKNESS)
-                        if text_on:
-                            font = cv2.FONT_HERSHEY_SIMPLEX
-                            cv2.putText(tmp_img, class_name, (xmin, ymin - 5), font, 0.6, color, LINE_THICKNESS, cv2.LINE_AA)
-    return tmp_img
+def draw_bboxes( img, objects, class_filter = None ):
+    for idx,obj in enumerate(objects):
+        class_idx, x1, y1, x2, y2 = obj
+        color = class_rgb[class_idx].tolist()
+
+        # draw resizing anchors if the object is selected
+        if gIsBboxSelected:
+            if idx == gSelectedBbox:
+                img = draw_bbox_anchors(img, x1, y1, x2, y2, color)
+
+        # draw bbox
+        if class_filter is None or class_filter == class_idx:
+            cv2.rectangle(img, (x1, y1), (x2, y2), color, LINE_THICKNESS)
+            if text_on:
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                cv2.putText(img, CLASS_LIST[class_idx], (x1, y1 - 5), font, 0.6, color, LINE_THICKNESS, cv2.LINE_AA)
+    return img
+
 
 
 def get_bbox_area(x1, y1, x2, y2):
