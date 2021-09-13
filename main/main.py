@@ -64,7 +64,7 @@ ZOOM_WINDOW_NAME = 'OpenLabeling (Zoomed)'
 TRACKBAR_IMG   = 'Image'
 TRACKBAR_CLASS = 'Class'
 
-annotation_formats = {'PASCAL_VOC' : '.xml', 'YOLO_darknet' : '.txt'}
+annotation_formats = {'YOLO_darknet' : '.txt'}
 TRACKER_DIR = os.path.join(OUTPUT_DIR, '.tracker')
 
 DRAW_FROM_PASCAL = args.draw_from_PASCAL_files
