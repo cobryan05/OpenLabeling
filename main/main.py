@@ -1531,21 +1531,22 @@ if __name__ == '__main__':
                             object_tracker.setImage( gOrigImg )
                             objects = object_tracker.update()
 
-                            addTrackedResults = True
                             if len(gImgObjects) > 0:
                                 # Deal with existing annotations
                                 annotated_bboxes = [ x1y1x2y22rxywh( obj[1:], img.shape ) for obj in gImgObjects]
                                 annotated_classes = [ obj[0] for obj in gImgObjects]
-                                updatedBoxes, matchedIds, lostIds = object_tracker.matchDetections( annotated_bboxes, annotated_classes )
+                                updatedBoxes, matchedIds, unmatchedIds = object_tracker.matchDetections( annotated_bboxes, annotated_classes )
 
-                                addTrackedResults = False
+                                # Initially don't add any tracked objects
+                                trackedIdsToAdd = { key: False for key in objects.keys() }
 
-                                if len(lostIds) > 0:
-                                    print("NOT IMPLEMENTED Lost ids!")
-                                    break
+                                for trackerId in unmatchedIds:
+                                    # We tracked an object that is not annotated in this scene, so add it
+                                    trackedIdsToAdd[trackerId] = True
 
-                                for idx,id in enumerate(matchedIds):
-                                    if id is not None:
+                                # TODO: Revisit this loop. Do we need to run it if !selected_bbox?
+                                for idx,trackerId in enumerate(matchedIds):
+                                    if trackerId is not None:
                                         if selected_bbox is not None:
                                             # This must match our selected box
                                             matched_obj = gImgObjects[idx]
@@ -1563,19 +1564,17 @@ if __name__ == '__main__':
                                                 else:
                                                     # The closest match isn't the same object, so we need to add our tracked object
                                                     assert( len(updatedBoxes) == 1 )
-                                                    addTrackedResults = True
+                                                    trackedIdsToAdd[trackedId] = True
                                             break
                                     else:
                                         pass
-                                        # # This is a new box
-                                        # x,y,w,h = rxywh2x1y1wh(annotated_bboxes[idx], img.shape)
-                                        # imgHeight, imgWidth = img.shape[:2]
-                                        # classId = annotated_classes[idx]
-                                        # save_bounding_box( annotation_paths, classId, (x,y), (x+w,y+h), imgWidth, imgHeight )
+                            else:
+                                # No annotations? Then add every tracked object
+                                trackedIdsToAdd = { key: True for key in objects.keys() }
 
-                            if addTrackedResults:
-                                # Just use the tracker's results
-                                for key,tracker in object_tracker._trackers.items():
+                            for trackerId,shouldAdd in trackedIdsToAdd.items():
+                                if shouldAdd:
+                                    tracker = object_tracker._trackers[trackerId]
                                     x,y,w,h = rxywh2x1y1wh(tracker.lastSeen, img.shape)
                                     imgHeight, imgWidth = img.shape[:2]
                                     classId = int( tracker.metadata['class'] )
