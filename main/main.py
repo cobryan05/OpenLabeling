@@ -213,11 +213,12 @@ def get_img_path( idx = None ):
     return IMAGE_PATH_LIST[idx]
 
 def set_img_index(x):
-    global gImgIdx, gOrigImg, gImgObjects, gIsBboxSelected
+    global gImgIdx, gOrigImg, gImgObjects, gIsBboxSelected, gRedrawNeeded
     gImgIdx = x
     img_path = get_img_path()
     gOrigImg = cv2.imread(img_path)
     gIsBboxSelected = False
+    gRedrawNeeded = True
     text = 'Showing image {}/{}, path: {}'.format(str(gImgIdx), str(last_img_index), img_path)
     display_text(text, 1000)
 
@@ -1282,6 +1283,7 @@ if __name__ == '__main__':
     thresh_high_offset = 0
     thresh_low_offset = 0
     zoom_radius = ZOOM_RADIUS
+    play_video = False
 
     display_text('Welcome!\n Press [h] for help.', 4000)
 
@@ -1375,6 +1377,19 @@ if __name__ == '__main__':
 
         pressed_key = cv2.waitKey(DELAY)
 
+        # Play video until the end of the video is reached or any key is pressed
+        if play_video:
+            if -1 != pressed_key:
+                play_video = False
+                pressed_key = -1
+            else:
+                endIdx = get_vid_img_index( gImgIdx, 1, last_img_index )
+                nextIdx = increase_index(gImgIdx, last_img_index)
+                if nextIdx != endIdx:
+                    cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, nextIdx)
+                else:
+                    play_video = False
+
         if dragBBox.anchor_being_dragged is None:
             ''' Key Listeners START '''
             if pressed_key == ord('A') or pressed_key == ord('a') or pressed_key == ord('D') or pressed_key == ord('d'):
@@ -1390,7 +1405,8 @@ if __name__ == '__main__':
                     gImgIdx = get_vid_img_index( gImgIdx, 1, last_img_index )
                 cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, gImgIdx)
                 img_obj_bak = []
-                gRedrawNeeded = True
+            elif pressed_key == ord(' '):
+                play_video = True
             elif pressed_key == ord('r'):
                 gRedrawNeeded = True
             elif pressed_key == ord('i'):
@@ -1433,6 +1449,7 @@ if __name__ == '__main__':
                         '[p] Track objects from the previous frame into this frame\n'
                         '[P] Track objects (just selected, or all if none selected) from this frame into the rest of video\n'
                         '[0] Delete the selected object, from this frame and the rest of the video\n'
+                        '[space] Auto-advance through the current video. Press any key to stop\n'
                         )
                 display_text(text, 5000)
             # show edges key listener
