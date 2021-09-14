@@ -14,6 +14,9 @@ from sklearn.cluster import MiniBatchKMeans
 
 sys.path.append( os.path.join( os.path.dirname( __file__ ), "..", "submodules" ) )
 
+from trackerTools.objectTracker import ObjectTracker
+from trackerTools.utils import *
+
 from lxml import etree
 import xml.etree.cElementTree as ET
 
@@ -204,11 +207,17 @@ def display_text(text, time):
     else:
         print(text)
 
+def get_img_path( idx = None ):
+    global gImgIdx
+    idx = idx or gImgIdx
+    return IMAGE_PATH_LIST[idx]
+
 def set_img_index(x):
-    global gImgIdx, gOrigImg
+    global gImgIdx, gOrigImg, gImgObjects, gIsBboxSelected
     gImgIdx = x
-    img_path = IMAGE_PATH_LIST[gImgIdx]
+    img_path = get_img_path()
     gOrigImg = cv2.imread(img_path)
+    gIsBboxSelected = False
     text = 'Showing image {}/{}, path: {}'.format(str(gImgIdx), str(last_img_index), img_path)
     display_text(text, 1000)
 
@@ -218,7 +227,9 @@ def set_img_index(x):
     image_name = os.path.basename(img_path)
     img_height, img_width, depth = (str(number) for number in gOrigImg.shape)
 
-    for ann_path in get_annotation_paths(img_path, annotation_formats):
+    annotation_paths = get_annotation_paths(img_path, annotation_formats)
+    gImgObjects = read_objects_from_file( annotation_paths )
+    for ann_path in annotation_paths:
         if not os.path.isfile(ann_path):
             if '.txt' in ann_path:
                 open(ann_path, 'a').close()
@@ -236,7 +247,7 @@ def get_vid_img_index( curIdx, dir, lastIdx ):
 
     prev_video_name = None
     while True:
-        img_path = IMAGE_PATH_LIST[curIdx]
+        img_path = get_img_path(curIdx)
         is_from_video, video_name = is_frame_from_video(img_path)
 
         # If video name changed, then break
@@ -309,7 +320,7 @@ def voc_format(class_name, point_1, point_2):
 def findIndex(obj_to_find):
     #return [(ind, img_objects[ind].index(obj_to_find)) for ind in xrange(len(img_objects)) if item in img_objects[ind]]
     ind = -1
-
+    obj_to_find = list(obj_to_find) # Handle np arrays being passed in
     ind_ = 0
     for listElem in gImgObjects:
         if listElem == obj_to_find:
@@ -432,12 +443,13 @@ def draw_bbox_anchors(tmp_img, xmin, ymin, xmax, ymax, color):
         cv2.rectangle(tmp_img, (int(x1), int(y1)), (int(x2), int(y2)), color, -1)
     return tmp_img
 
-def draw_bboxes_from_file(tmp_img, annotation_paths, width, height, class_filter = None ):
+def draw_bboxes_from_file(tmp_img, annotation_paths, class_filter = None ):
     global gImgObjects
     gImgObjects = read_objects_from_file( annotation_paths )
     return draw_bboxes( tmp_img, gImgObjects, class_filter = class_filter)
 
 def read_objects_from_file( annotation_paths ):
+    global gOrigImg
     fileObjects = []
     ann_path = None
     if DRAW_FROM_PASCAL:
@@ -456,11 +468,12 @@ def read_objects_from_file( annotation_paths ):
                 #print('{} {} {} {} {}'.format(class_index, xmin, ymin, xmax, ymax))
                 fileObjects.append([class_index, xmin, ymin, xmax, ymax])
         else:
+            imgHeight, imgWidth = gOrigImg.shape[:2]
             # Draw from YOLO
             with open(ann_path) as fp:
                 for idx, line in enumerate(fp):
                     obj = line
-                    class_name, class_index, xmin, ymin, xmax, ymax = get_txt_object_data(obj, width, height)
+                    class_name, class_index, xmin, ymin, xmax, ymax = get_txt_object_data(obj, imgWidth, imgHeight)
                     #print('{} {} {} {} {}'.format(class_index, xmin, ymin, xmax, ymax))
                     fileObjects.append([class_index, xmin, ymin, xmax, ymax])
     return fileObjects
@@ -540,7 +553,7 @@ def edit_bbox(obj_to_edit, action):
     # 1. initialize bboxes_to_edit_dict
     #    (we use a dict since a single label can be associated with multiple ones in videos)
     bboxes_to_edit_dict = {}
-    current_img_path = IMAGE_PATH_LIST[gImgIdx]
+    current_img_path = get_img_path()
     bboxes_to_edit_dict[current_img_path] = obj_to_edit
 
     # 2. add elements to bboxes_to_edit_dict
@@ -844,10 +857,10 @@ def create_PASCAL_VOC_xml(xml_path, abs_path, folder_name, image_name, img_heigh
     write_xml(xml_str, xml_path)
 
 
-def save_bounding_box(annotation_paths, class_index, point_1, point_2, width, height):
+def save_bounding_box(annotation_paths, class_index, point_1, point_2, imgWidth, imgHeight):
     for ann_path in annotation_paths:
         if '.txt' in ann_path:
-            line = yolo_format(class_index, point_1, point_2, width, height)
+            line = yolo_format(class_index, point_1, point_2, imgWidth, imgHeight)
             append_bb(ann_path, line, '.txt')
         elif '.xml' in ann_path:
             line = voc_format(CLASS_LIST[class_index], point_1, point_2)
@@ -1055,7 +1068,7 @@ def clear_bboxes():
     global gImgObjects, gImgIdx
     img_objects_bak = gImgObjects.copy()
 
-    img_path = IMAGE_PATH_LIST[gImgIdx]
+    img_path = get_img_path()
     for path in get_annotation_paths(img_path, annotation_formats):
         if os.path.exists( path ):
             os.remove( path )
@@ -1302,9 +1315,9 @@ if __name__ == '__main__':
                 class_filter = gClassIdx
 
             # get annotation paths
-            img_path = IMAGE_PATH_LIST[gImgIdx]
+            img_path = get_img_path()
             annotation_paths = get_annotation_paths(img_path, annotation_formats)
-            base_img = draw_bboxes_from_file(base_img, annotation_paths, width, height, class_filter)
+            base_img = draw_bboxes_from_file(base_img, annotation_paths, class_filter)
 
         tmp_img = base_img.copy()
         # draw vertical and horizontal guide lines
@@ -1404,8 +1417,8 @@ if __name__ == '__main__':
                 set_class_index(gClassIdx)
                 cv2.setTrackbarPos(TRACKBAR_CLASS, WINDOW_NAME, gClassIdx)
                 if gIsBboxSelected:
-                    obj_to_edit = gImgObjects[gSelectedBbox]
-                    edit_bbox(obj_to_edit, 'change_class:{}'.format(gClassIdx))
+                    matched_obj = gImgObjects[gSelectedBbox]
+                    edit_bbox(matched_obj, 'change_class:{}'.format(gClassIdx))
             # help key listener
             elif pressed_key == ord('h'):
                 text = ('[e] to show edges;\n'
@@ -1417,6 +1430,9 @@ if __name__ == '__main__':
                         '[c] to toggle inactive showing only active class bboxes\n'
                         '[y] to clear bboxes and run yolo inference\n'
                         '[1|3] zoom in|zoom out\n'
+                        '[p] Track objects from the previous frame into this frame\n'
+                        '[P] Track objects (just selected, or all if none selected) from this frame into the rest of video\n'
+                        '[0] Delete the selected object, from this frame and the rest of the video\n'
                         )
                 display_text(text, 5000)
             # show edges key listener
@@ -1441,27 +1457,147 @@ if __name__ == '__main__':
                 tmp = gImgObjects.copy()
                 restore_bboxes( tmp_img, annotation_paths, img_obj_bak)
                 img_obj_bak = tmp
-            elif pressed_key == ord('p'):
+            elif pressed_key == ord('P') or pressed_key == ord('p') or pressed_key == ord('0'):
+                singleFrame = ( pressed_key == ord('p') )
+                deleteBbox = ( pressed_key == ord('0') )
+                selected_bbox = None
                 # check if the image is a frame from a video
                 is_from_video, video_name = is_frame_from_video(img_path)
-                if is_from_video:
+                if is_from_video and ( gSelectedBbox != -1 or deleteBbox == False ):
                     # get list of objects associated to that frame
-                    object_list = gImgObjects[:]
-                    # remove the objects in that frame that are already in the `.json` file
-                    json_file_path = '{}.json'.format(os.path.join(TRACKER_DIR, video_name))
-                    file_exists, json_file_data = get_json_file_data(json_file_path)
-                    if file_exists:
-                        object_list = remove_already_tracked_objects(object_list, img_path, json_file_data)
-                    if len(object_list) > 0:
-                        # get list of frames following this image
+                    object_list = np.array(gImgObjects)
+
+                    object_tracker = ObjectTracker()
+
+                    # Grab objects from previous frame if just single-frame
+                    if singleFrame:
+                        gImgIdx = decrease_index(gImgIdx, last_img_index)
+                        cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, gImgIdx)
+                        imgPath = get_img_path()
+                        object_list = np.array(gImgObjects)
+                    elif gIsBboxSelected:
+                        # Track an object, but delete it each frame
+                        selected_bbox = object_list[gSelectedBbox]
+                        selected_bbox_class = selected_bbox[0]
+                        object_list = np.array([selected_bbox])
+                        if deleteBbox:
+                            edit_bbox(selected_bbox, 'delete')
+
+
+                    if len(object_list) == 0:
+                        print(f"Can't track video objects when no objects are marked in current frame")
+                    else:
+                        # Initialize trackers with the current frames annotated bounding boxes
+                        object_tracker.setImage( gOrigImg )
+                        object_classes = object_list[:,0]
+                        object_bboxes = object_list[:,1:]
+                        object_bboxes = [ x1y1x2y22rxywh( bbox, gOrigImg.shape ) for bbox in object_bboxes ]
+                        object_metadata = [ { "class": objClass } for objClass in object_classes ]
+                        object_tracker.updateDetections( object_bboxes, object_metadata)
+
+                    objects = object_tracker.update()
+                    if len(objects) > 0:
+                        # Get list of frames
                         next_frame_path_list = get_next_frame_path_list(video_name, img_path)
-                        # initial frame
-                        init_frame = gOrigImg.copy()
-                        label_tracker = LabelTracker(TRACKER_TYPE, init_frame, next_frame_path_list)
-                        for obj in object_list:
-                            gClassIdx = obj[0]
-                            color = class_rgb[gClassIdx].tolist()
-                            label_tracker.start_tracker(json_file_data, json_file_path, img_path, obj, color, annotation_formats)
+                        last_idx = get_vid_img_index( gImgIdx, 1, last_img_index )
+                        exitLoop = False
+                        # Iterate through all of the remaining video frames
+                        while gImgIdx != last_idx and not exitLoop:
+                            # Get the next image
+                            gImgIdx = increase_index(gImgIdx, last_img_index)
+                            cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, gImgIdx)
+                            imgPath = get_img_path()
+                            annotation_paths = get_annotation_paths(imgPath, annotation_formats)
+
+                            # Update the trackers with the new image
+                            img = gOrigImg.copy()
+                            object_tracker.setImage( gOrigImg )
+                            objects = object_tracker.update()
+
+                            addTrackedResults = True
+                            if len(gImgObjects) > 0:
+                                # Deal with existing annotations
+                                annotated_bboxes = [ x1y1x2y22rxywh( obj[1:], img.shape ) for obj in gImgObjects]
+                                annotated_classes = [ obj[0] for obj in gImgObjects]
+                                updatedBoxes, matchedIds, lostIds = object_tracker.matchDetections( annotated_bboxes, annotated_classes )
+
+                                addTrackedResults = False
+
+                                if len(lostIds) > 0:
+                                    print("NOT IMPLEMENTED Lost ids!")
+                                    break
+
+                                for idx,id in enumerate(matchedIds):
+                                    if id is not None:
+                                        if selected_bbox is not None:
+                                            # This must match our selected box
+                                            matched_obj = gImgObjects[idx]
+                                            matched_obj_class = matched_obj[0]
+                                            if matched_obj_class == selected_bbox_class:
+                                                if deleteBbox:
+                                                    edit_bbox(matched_obj, 'delete')
+                                                else: # Auto-adding a single tracked object, and it already is in frame?
+                                                    print(f"Found a matching object in new frame, stopping auto-add.")
+                                                    exitLoop = True
+                                            else:
+                                                if deleteBbox:
+                                                    print(f"Class mismatch in deleting matching object. Looking for {selected_bbox_class}, found {matched_obj_class}")
+                                                    exitLoop = True
+                                                else:
+                                                    # The closest match isn't the same object, so we need to add our tracked object
+                                                    assert( len(updatedBoxes) == 1 )
+                                                    addTrackedResults = True
+                                            break
+                                    else:
+                                        pass
+                                        # # This is a new box
+                                        # x,y,w,h = rxywh2x1y1wh(annotated_bboxes[idx], img.shape)
+                                        # imgHeight, imgWidth = img.shape[:2]
+                                        # classId = annotated_classes[idx]
+                                        # save_bounding_box( annotation_paths, classId, (x,y), (x+w,y+h), imgWidth, imgHeight )
+
+                            if addTrackedResults:
+                                # Just use the tracker's results
+                                for key,tracker in object_tracker._trackers.items():
+                                    x,y,w,h = rxywh2x1y1wh(tracker.lastSeen, img.shape)
+                                    imgHeight, imgWidth = img.shape[:2]
+                                    classId = int( tracker.metadata['class'] )
+                                    save_bounding_box( annotation_paths, classId, (x,y), (x+w,y+h), imgWidth, imgHeight )
+
+                            dbgImg = img.copy()
+                            draw_bboxes_from_file( dbgImg, annotation_paths )
+                            cv2.imshow( WINDOW_NAME, dbgImg )
+                            if cv2.waitKey(25) != -1:
+                                break
+
+                            if singleFrame:
+                                break
+
+                            # for key,tracker in object_tracker._trackers.items():
+                            #     x1,y1,w,h = rxywh2x1y1wh(tracker.lastSeen, img.shape)
+                            #     cv2.rectangle( img, (x1,y1), (x1+w,y1+h), (0,0,255))
+                            #     cv2.putText( img, f"Id:{key} Missed: {tracker.lostCount}", (x1,y1), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255))
+                            # cv2.imshow( WINDOW_NAME, img )
+                            # cv2.waitKey()
+
+                    gRedrawNeeded = True
+
+
+                    # # remove the objects in that frame that are already in the `.json` file
+                    # json_file_path = '{}.json'.format(os.path.join(TRACKER_DIR, video_name))
+                    # file_exists, json_file_data = get_json_file_data(json_file_path)
+                    # if file_exists:
+                    #     object_list = remove_already_tracked_objects(object_list, img_path, json_file_data)
+                    # if len(object_list) > 0:
+                    #     # get list of frames following this image
+                    #     next_frame_path_list = get_next_frame_path_list(video_name, img_path)
+                    #     # initial frame
+                    #     init_frame = gOrigImg.copy()
+                    #     label_tracker = LabelTracker(TRACKER_TYPE, init_frame, next_frame_path_list)
+                    #     for obj in object_list:
+                    #         gClassIdx = obj[0]
+                    #         color = class_rgb[gClassIdx].tolist()
+                    #         label_tracker.start_tracker(json_file_data, json_file_path, img_path, obj, color, annotation_formats)
             # quit key listener
             elif pressed_key == ord('q'):
                 break
