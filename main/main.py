@@ -73,7 +73,6 @@ TRACKER_DIR = os.path.join(OUTPUT_DIR, '.tracker')
 DRAW_FROM_PASCAL = args.draw_from_PASCAL_files
 
 # selected bounding box
-gPrevWasDoubleClick = False
 gIsBboxSelected = False
 gSelectedBbox = -1
 LINE_THICKNESS = args.thickness
@@ -116,7 +115,7 @@ class dragBBox:
     '''
 
     # Size of resizing anchors (depends on LINE_THICKNESS)
-    sRA = LINE_THICKNESS * 2
+    sRA = LINE_THICKNESS * 4
 
     # Object being dragged
     selected_object = None
@@ -481,6 +480,7 @@ def read_objects_from_file( annotation_paths ):
 
 
 def draw_bboxes( img, objects, class_filter = None ):
+    global gIsBboxSelected
     for idx,obj in enumerate(objects):
         class_idx, x1, y1, x2, y2 = obj
         color = class_rgb[class_idx].tolist()
@@ -677,13 +677,12 @@ def edit_bbox(obj_to_edit, action):
 
 def mouse_listener(event, x, y, flags, param):
     # mouse callback function
-    global gIsBboxSelected, gPrevWasDoubleClick, gMouseX, gMouseY, gPoint1, gPoint2, gRedrawNeeded, gOrigImg
+    global gIsBboxSelected, gMouseX, gMouseY, gPoint1, gPoint2, gRedrawNeeded, gOrigImg
 
     if event == cv2.EVENT_MOUSEMOVE:
         gMouseX = x
         gMouseY = y
     elif event == cv2.EVENT_LBUTTONDBLCLK:
-        gPrevWasDoubleClick = True
         #print('Double click')
         gPoint1 = (-1, -1)
         # if clicked inside a bounding box we set that bbox
@@ -706,34 +705,28 @@ def mouse_listener(event, x, y, flags, param):
             gRedrawNeeded = True
 
     elif event == cv2.EVENT_LBUTTONDOWN:
-        if gPrevWasDoubleClick:
-            #print('Finish double click')
-            gPrevWasDoubleClick = False
-        else:
-            #print('Normal left click')
+        # Check if mouse inside on of resizing anchors of the selected bbox
+        if gIsBboxSelected:
+            dragBBox.handler_left_mouse_down(x, y, gImgObjects[gSelectedBbox])
 
-            # Check if mouse inside on of resizing anchors of the selected bbox
-            if gIsBboxSelected:
-                dragBBox.handler_left_mouse_down(x, y, gImgObjects[gSelectedBbox])
-
-            if dragBBox.anchor_being_dragged is None:
-                if gPoint1[0] == -1:
-                    if gIsBboxSelected:
-                        if is_mouse_inside_delete_button():
-                            set_selected_bbox(True)
-                            obj_to_edit = gImgObjects[gSelectedBbox]
-                            edit_bbox(obj_to_edit, 'delete')
-                        gIsBboxSelected = False
-                    else:
-                        # first click (start drawing a bounding box or delete an item)
-
-                        gPoint1 = (x, y)
+        if dragBBox.anchor_being_dragged is None:
+            if gPoint1[0] == -1:
+                if gIsBboxSelected:
+                    if is_mouse_inside_delete_button():
+                        set_selected_bbox(True)
+                        obj_to_edit = gImgObjects[gSelectedBbox]
+                        edit_bbox(obj_to_edit, 'delete')
+                    gIsBboxSelected = False
+                    gRedrawNeeded = True
                 else:
-                    # minimal size for bounding box to avoid errors
-                    threshold = 5
-                    if abs(x - gPoint1[0]) > threshold or abs(y - gPoint1[1]) > threshold:
-                        # second click
-                        gPoint2 = (x, y)
+                    # first click (start drawing a bounding box or delete an item)
+                    gPoint1 = (x, y)
+            else:
+                # minimal size for bounding box to avoid errors
+                threshold = 5
+                if abs(x - gPoint1[0]) > threshold or abs(y - gPoint1[1]) > threshold:
+                    # second click
+                    gPoint2 = (x, y)
 
     elif event == cv2.EVENT_LBUTTONUP:
         if dragBBox.anchor_being_dragged is not None:
