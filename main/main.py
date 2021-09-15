@@ -1489,10 +1489,14 @@ if __name__ == '__main__':
 
                     # Grab objects from previous frame if just single-frame
                     if singleFrame:
-                        gImgIdx = decrease_index(gImgIdx, last_img_index)
-                        cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, gImgIdx)
-                        imgPath = get_img_path()
-                        object_list = np.array(gImgObjects)
+                        singleFrameIdx = gImgIdx
+                        while True:
+                            gImgIdx = decrease_index(gImgIdx, last_img_index)
+                            cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, gImgIdx)
+                            imgPath = get_img_path()
+                            object_list = np.array(gImgObjects)
+                            if len(object_list) > 0 or singleFrameIdx == gImgIdx:
+                                break
                     elif gIsBboxSelected:
                         # Track an object, but delete it each frame
                         selected_bbox = object_list[gSelectedBbox]
@@ -1519,6 +1523,12 @@ if __name__ == '__main__':
                         next_frame_path_list = get_next_frame_path_list(video_name, img_path)
                         last_idx = get_vid_img_index( gImgIdx, 1, last_img_index )
                         exitLoop = False
+
+                        # If only processing a single frame we may have rewound quite a bit. Put us back to 1 before our
+                        # active frame
+                        if singleFrame:
+                            gImgIdx = decrease_index(singleFrameIdx, last_img_index )
+
                         # Iterate through all of the remaining video frames
                         while gImgIdx != last_idx and not exitLoop:
                             # Get the next image
