@@ -1483,6 +1483,7 @@ if __name__ == '__main__':
                 if is_from_video and ( gSelectedBbox != -1 or deleteBbox == False ):
                     # get list of objects associated to that frame
                     object_list = np.array(gImgObjects)
+                    origImgIdx = gImgIdx
 
                     object_tracker = ObjectTracker()
 
@@ -1597,6 +1598,10 @@ if __name__ == '__main__':
                             # cv2.waitKey()
 
                     gRedrawNeeded = True
+
+                    # If we were deleting a bbox we should return to the original frame
+                    if deleteBbox:
+                        cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, origImgIdx)
 
 
                     # # remove the objects in that frame that are already in the `.json` file
