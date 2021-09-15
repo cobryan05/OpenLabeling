@@ -1,6 +1,6 @@
 #!/bin/python
 import argparse
-import glob
+import pathlib
 import json
 import os
 import re
@@ -12,7 +12,9 @@ import czifile
 from tqdm import tqdm
 from sklearn.cluster import MiniBatchKMeans
 
-sys.path.append( os.path.join( os.path.dirname( __file__ ), "..", "submodules" ) )
+submodules_dir = os.path.join( pathlib.Path('__file__').parent.resolve(), "..", "submodules" )
+sys.path.append( submodules_dir )
+sys.path.append( os.path.join(submodules_dir, "yolov5") )
 
 from trackerTools.objectTracker import ObjectTracker
 from trackerTools.utils import *
