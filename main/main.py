@@ -1057,6 +1057,28 @@ class LabelTracker():
             json.dump(json_file_data, outfile, sort_keys=True, indent=4)
 
 
+def get_cropped_img( img, centerX, centerY, width, height ):
+    img_y, img_x, _ = img.shape
+    crop_left = centerX - width
+    crop_right = centerX + width
+    if crop_left < 0:
+        crop_left = 0
+        crop_right = min( 2*width, img_x )
+    elif crop_right > img_x:
+        crop_right = img_x
+        crop_left = max( crop_right - 2*width, 0 )
+
+    crop_top = centerY - height
+    crop_bottom = centerY + height
+    if crop_top < 0:
+        crop_top = 0
+        crop_bottom = min( 2*height, img_y )
+    elif crop_bottom > img_y:
+        crop_bottom = img_y
+        crop_top = max( crop_bottom - 2*height, 0)
+    return img[crop_top:crop_bottom, crop_left:crop_right]
+
+
 # Backup current annotations and then clear them
 def clear_bboxes():
     global gImgObjects, gImgIdx
@@ -1347,26 +1369,8 @@ if __name__ == '__main__':
                 gPoint2 = (-1, -1)
 
         cv2.imshow(WINDOW_NAME, tmp_img)
-
-        img_y, img_x, _ = tmp_img.shape
-        crop_left = gMouseX - zoom_radius
-        crop_right = gMouseX + zoom_radius
-        if crop_left < 0:
-            crop_left = 0
-            crop_right = min( 2*zoom_radius, img_x )
-        elif crop_right > img_x:
-            crop_right = img_x
-            crop_left = max( crop_right - 2*zoom_radius, 0 )
-
-        crop_top = gMouseY - zoom_radius
-        crop_bottom = gMouseY + zoom_radius
-        if crop_top < 0:
-            crop_top = 0
-            crop_bottom = min( 2*zoom_radius, img_y )
-        elif crop_bottom > img_y:
-            crop_bottom = img_y
-            crop_top = max( crop_bottom - 2*zoom_radius, 0)
-        cv2.imshow(ZOOM_WINDOW_NAME, tmp_img[crop_top:crop_bottom, crop_left:crop_right])
+        zoomed_img = get_cropped_img( tmp_img, gMouseX, gMouseY, zoom_radius, zoom_radius )
+        cv2.imshow(ZOOM_WINDOW_NAME, zoomed_img)
 
         pressed_key = cv2.waitKey(DELAY)
 
@@ -1580,6 +1584,8 @@ if __name__ == '__main__':
                             dbgImg = img.copy()
                             draw_bboxes_from_file( dbgImg, annotation_paths )
                             cv2.imshow( WINDOW_NAME, dbgImg )
+                            zoomed_dbg_img = get_cropped_img( dbgImg, gMouseX, gMouseY, zoom_radius, zoom_radius )
+                            cv2.imshow(ZOOM_WINDOW_NAME, zoomed_dbg_img)
                             if cv2.waitKey(25) != -1:
                                 break
 
