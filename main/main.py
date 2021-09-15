@@ -318,12 +318,13 @@ def voc_format(class_name, point_1, point_2):
     return items
 
 def findIndex(obj_to_find):
-    #return [(ind, img_objects[ind].index(obj_to_find)) for ind in xrange(len(img_objects)) if item in img_objects[ind]]
+    SAME_OBJ_THRESHOLD = 10
     ind = -1
-    obj_to_find = list(obj_to_find) # Handle np arrays being passed in
+    obj_to_find = np.array(obj_to_find)
     ind_ = 0
-    for listElem in gImgObjects:
-        if listElem == obj_to_find:
+    for listElem in np.array(gImgObjects):
+        elemDiff = sum(abs(listElem - obj_to_find))
+        if elemDiff <= SAME_OBJ_THRESHOLD:
             ind = ind_
             return ind
         ind_ = ind_+1
