@@ -1483,7 +1483,7 @@ if __name__ == '__main__':
                     object_list = np.array(gImgObjects)
                     origImgIdx = gImgIdx
 
-                    object_tracker = ObjectTracker()
+                    object_tracker = ObjectTracker("CSRT")
 
                     # Grab objects from previous frame if just single-frame
                     if singleFrame:
@@ -1563,7 +1563,7 @@ if __name__ == '__main__':
                                                 else:
                                                     # The closest match isn't the same object, so we need to add our tracked object
                                                     assert( len(updatedBoxes) == 1 )
-                                                    trackedIdsToAdd[trackedId] = True
+                                                    trackedIdsToAdd[trackerId] = True
                                             break
                                     else:
                                         pass
