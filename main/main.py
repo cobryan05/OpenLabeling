@@ -1570,8 +1570,11 @@ if __name__ == '__main__':
                                     else:
                                         pass
                             else:
-                                # No annotations? Then add every tracked object
-                                trackedIdsToAdd = { key: True for key in objects.keys() }
+                                # No annotations? Then add every tracked object (unless we were deleting, in which case we abort)
+                                if deleteBbox:
+                                    exitLoop = True
+                                else:
+                                    trackedIdsToAdd = { key: True for key in objects.keys() }
 
                             for trackerId,shouldAdd in trackedIdsToAdd.items():
                                 if shouldAdd:
