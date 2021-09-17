@@ -1392,16 +1392,16 @@ if __name__ == '__main__':
 
         if dragBBox.anchor_being_dragged is None:
             ''' Key Listeners START '''
-            if pressed_key == ord('A') or pressed_key == ord('a') or pressed_key == ord('D') or pressed_key == ord('d'):
+            if pressed_key in [ ord('['), ord('{'), ord(']'), ord('}') ]:
                 # show previous image key listener
-                if pressed_key == ord('a'):
+                if pressed_key == ord('['):
                     gImgIdx = decrease_index(gImgIdx, last_img_index)
-                elif pressed_key == ord('A'):
+                elif pressed_key == ord('{'):
                     gImgIdx = get_vid_img_index( gImgIdx, -1, last_img_index )
                 # show next image key listener
-                elif pressed_key == ord('d'):
+                elif pressed_key == ord(']'):
                     gImgIdx = increase_index(gImgIdx, last_img_index)
-                elif pressed_key == ord('D'):
+                elif pressed_key == ord('}'):
                     gImgIdx = get_vid_img_index( gImgIdx, 1, last_img_index )
                 cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, gImgIdx)
                 img_obj_bak = []
@@ -1409,7 +1409,7 @@ if __name__ == '__main__':
                 play_video = True
             elif pressed_key == ord('r'):
                 gRedrawNeeded = True
-            elif pressed_key == ord('i'):
+            elif pressed_key == ord('f'):
                 invert_image = not invert_image
                 gRedrawNeeded = True
             elif pressed_key == ord('1'):
@@ -1422,12 +1422,12 @@ if __name__ == '__main__':
             elif pressed_key == ord('m'):
                 masked_on = not masked_on
                 gRedrawNeeded = True
-            elif pressed_key == ord('s') or pressed_key == ord('w'):
+            elif pressed_key in [ord('e'), ord('r')]:
                 # change down current class key listener
-                if pressed_key == ord('s'):
+                if pressed_key == ord('e'):
                     gClassIdx = decrease_index(gClassIdx, last_class_index)
                 # change up current class key listener
-                elif pressed_key == ord('w'):
+                elif pressed_key == ord('r'):
                     gClassIdx = increase_index(gClassIdx, last_class_index)
                 draw_line(tmp_img, gMouseX, gMouseY, height, width, color)
                 set_class_index(gClassIdx)
@@ -1437,11 +1437,14 @@ if __name__ == '__main__':
                     edit_bbox(matched_obj, 'change_class:{}'.format(gClassIdx))
             # help key listener
             elif pressed_key == ord('h'):
-                text = ('[e] to show edges;\n'
-                        '[q] to quit;\n'
-                        '[a] or [d] to change Image;\n'
-                        '[A] or [D] to change Video;\n'
-                        '[w] or [s] to change Class.\n'
+                text = ('[z] to show edges;\n'
+                        '[ESC] to quit;\n'
+                        '[[] or []] to change Image;\n'
+                        '[{] or [}] to change Video;\n'
+                        '[q] or [e] to change Class.\n'
+                        '[f] to invert image\n'
+                        '[w,a,s,d] move bbox side in\n'
+                        '[W,A,S,D] move bbox side out\n'
                         '[t] to toggle text\n'
                         '[c] to toggle inactive showing only active class bboxes\n'
                         '[y] to clear bboxes and run yolo inference\n'
@@ -1453,7 +1456,7 @@ if __name__ == '__main__':
                         )
                 display_text(text, 5000)
             # show edges key listener
-            elif pressed_key == ord('e'):
+            elif pressed_key == ord('z'):
                 edges_on = not edges_on
                 display_text( f"Edges turned {'ON' if edges_on else 'OFF'}!", 1000)
                 gRedrawNeeded = True
@@ -1465,6 +1468,32 @@ if __name__ == '__main__':
                 show_only_active_class = not show_only_active_class
                 display_text( f"Show only active class bboxes turned {'ON' if show_only_active_class else 'OFF'}!", 1000)
                 gRedrawNeeded = True
+            elif gIsBboxSelected and pressed_key in [ ord('a'), ord('A'), ord('w'), ord('W'), ord('d'), ord('D'), ord('s'), ord('S') ]:
+                selected_bbox = gImgObjects[gSelectedBbox]
+                _, left, top, right, bottom = selected_bbox
+                offset = 3
+                if pressed_key == ord('a'):
+                    left -= offset
+                elif pressed_key == ord('A'):
+                    left += offset
+                elif pressed_key == ord('w'):
+                    top -= offset
+                elif pressed_key == ord('W'):
+                    top += offset
+                elif pressed_key == ord('d'):
+                    right += offset
+                elif pressed_key == ord('D'):
+                    right -= offset
+                elif pressed_key == ord('s'):
+                    bottom += offset
+                elif pressed_key == ord('S'):
+                    bottom -= offset
+
+                action = "resize_bbox:{}:{}:{}:{}".format(left, top, right, bottom)
+                edit_bbox(selected_bbox, action)
+                gRedrawNeeded = True
+
+
             elif pressed_key == ord('y') and yolo is not None:
                 if len(img_obj_bak) == 0 :
                     img_obj_bak = clear_bboxes()
@@ -1599,7 +1628,7 @@ if __name__ == '__main__':
                             cv2.imshow( WINDOW_NAME, dbgImg )
                             zoomed_dbg_img = get_cropped_img( dbgImg, gMouseX, gMouseY, zoom_radius, zoom_radius )
                             cv2.imshow(ZOOM_WINDOW_NAME, zoomed_dbg_img)
-                            if cv2.waitKey(25) != -1:
+                            if cv2.waitKey(1) != -1:
                                 break
 
                             if singleFrame:
@@ -1635,7 +1664,7 @@ if __name__ == '__main__':
                     #         color = class_rgb[gClassIdx].tolist()
                     #         label_tracker.start_tracker(json_file_data, json_file_path, img_path, obj, color, annotation_formats)
             # quit key listener
-            elif pressed_key == ord('q'):
+            elif pressed_key == 27: # ESC on Windows
                 break
             ''' Key Listeners END '''
 
