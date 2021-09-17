@@ -483,7 +483,7 @@ def read_objects_from_file( annotation_paths ):
 
 
 def draw_bboxes( img, objects, class_filter = None ):
-    global gIsBboxSelected
+    global gIsBboxSelected, gSelectedBbox
     for idx,obj in enumerate(objects):
         class_idx, x1, y1, x2, y2 = obj
         color = class_rgb[class_idx].tolist()
@@ -509,8 +509,8 @@ def get_bbox_area(x1, y1, x2, y2):
     return width*height
 
 
-def set_selected_bbox(set_class):
-    global gIsBboxSelected, gSelectedBbox, gRedrawNeeded
+def select_bbox_under_mouse(set_class):
+    global gImgObjects
     smallest_area = -1
     # if clicked inside multiple bboxes selects the smallest one
     for idx, obj in enumerate(gImgObjects):
@@ -520,15 +520,21 @@ def set_selected_bbox(set_class):
         x2 = x2 + dragBBox.sRA
         y2 = y2 + dragBBox.sRA
         if pointInRect(gMouseX, gMouseY, x1, y1, x2, y2):
-            gIsBboxSelected = True
-            gRedrawNeeded = True
             tmp_area = get_bbox_area(x1, y1, x2, y2)
             if tmp_area < smallest_area or smallest_area == -1:
                 smallest_area = tmp_area
-                gSelectedBbox = idx
-                if set_class:
-                    # set class to the one of the selected bounding box
-                    cv2.setTrackbarPos(TRACKBAR_CLASS, WINDOW_NAME, ind)
+                set_selected_bbox( idx, ind )
+
+
+def set_selected_bbox(idx, select_class = None):
+    global gSelectedBbox, gRedrawNeeded, gIsBboxSelected
+    gSelectedBbox = idx
+    if select_class is not None:
+        # set class to the one of the selected bounding box
+        cv2.setTrackbarPos(TRACKBAR_CLASS, WINDOW_NAME, select_class)
+    gRedrawNeeded = True
+    gIsBboxSelected = True
+
 
 
 def is_mouse_inside_delete_button():
@@ -689,10 +695,10 @@ def mouse_listener(event, x, y, flags, param):
         #print('Double click')
         gPoint1 = (-1, -1)
         # if clicked inside a bounding box we set that bbox
-        set_selected_bbox(True)
+        select_bbox_under_mouse(True)
     # By AlexeyGy: delete via right-click
     elif event == cv2.EVENT_RBUTTONDOWN:
-        set_selected_bbox(False)
+        select_bbox_under_mouse(False)
         if gIsBboxSelected:
             obj_to_edit = gImgObjects[gSelectedBbox]
             edit_bbox(obj_to_edit, 'delete')
@@ -700,7 +706,7 @@ def mouse_listener(event, x, y, flags, param):
             gRedrawNeeded = True
     # Change class to current class via middle-click
     elif event == cv2.EVENT_MBUTTONDOWN:
-        set_selected_bbox(False)
+        select_bbox_under_mouse(False)
         if gIsBboxSelected:
             obj_to_edit = gImgObjects[gSelectedBbox]
             edit_bbox(obj_to_edit, f'change_class:{gClassIdx}')
@@ -716,7 +722,7 @@ def mouse_listener(event, x, y, flags, param):
             if gPoint1[0] == -1:
                 if gIsBboxSelected:
                     if is_mouse_inside_delete_button():
-                        set_selected_bbox(True)
+                        select_bbox_under_mouse(True)
                         obj_to_edit = gImgObjects[gSelectedBbox]
                         edit_bbox(obj_to_edit, 'delete')
                     gIsBboxSelected = False
@@ -1422,12 +1428,12 @@ if __name__ == '__main__':
             elif pressed_key == ord('m'):
                 masked_on = not masked_on
                 gRedrawNeeded = True
-            elif pressed_key in [ord('e'), ord('r')]:
+            elif pressed_key in [ord('e'), ord('q')]:
                 # change down current class key listener
                 if pressed_key == ord('e'):
                     gClassIdx = decrease_index(gClassIdx, last_class_index)
                 # change up current class key listener
-                elif pressed_key == ord('r'):
+                elif pressed_key == ord('q'):
                     gClassIdx = increase_index(gClassIdx, last_class_index)
                 draw_line(tmp_img, gMouseX, gMouseY, height, width, color)
                 set_class_index(gClassIdx)
@@ -1452,6 +1458,7 @@ if __name__ == '__main__':
                         '[p] Track objects from the previous frame into this frame\n'
                         '[P] Track objects (just selected, or all if none selected) from this frame into the rest of video\n'
                         '[0] Delete the selected object, from this frame and the rest of the video\n'
+                        '[`] or [~] cycle selected bbox'
                         '[space] Auto-advance through the current video. Press any key to stop\n'
                         )
                 display_text(text, 5000)
@@ -1493,6 +1500,19 @@ if __name__ == '__main__':
                 edit_bbox(selected_bbox, action)
                 gRedrawNeeded = True
 
+            elif pressed_key in [ord('`'), ord('~')]:
+                if gSelectedBbox < 0:
+                    nextBbox = 0
+                elif pressed_key == ord('`'):
+                    nextBbox = gSelectedBbox - 1
+                    if nextBbox < 0:
+                        nextBbox = len(gImgObjects) - 1
+                elif pressed_key == ord('~'):
+                    nextBbox = gSelectedBbox + 1
+                    if nextBbox >= len(gImgObjects):
+                        nextBbox = 0
+
+                set_selected_bbox(nextBbox)
 
             elif pressed_key == ord('y') and yolo is not None:
                 if len(img_obj_bak) == 0 :
