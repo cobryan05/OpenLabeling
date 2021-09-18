@@ -1110,10 +1110,8 @@ def restore_bboxes( img, annotation_paths, img_objects ):
 def run_yolo( img, yolo ):
     results = yolo.runInference( img )
     yolo_img_objs = []
-    for result in results:
-        classIdx = int(result[3])
-        x,y,w,h = yolo2xywh( result, img.shape )
-        yolo_img_objs.append( ( classIdx, x, y, x+w, y+h ) )
+    for (x,y),(w,h),conf,objclass in results:
+        yolo_img_objs.append( ( objclass, x, y, x+w, y+h ) )
     return yolo_img_objs
 
 
