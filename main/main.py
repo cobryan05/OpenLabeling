@@ -537,16 +537,6 @@ def set_selected_bbox(idx, select_class = None):
 
 
 
-def is_mouse_inside_delete_button():
-    for idx, obj in enumerate(gImgObjects):
-        if idx == gSelectedBbox:
-            _ind, x1, y1, x2, y2 = obj
-            x1_c, y1_c, x2_c, y2_c = get_close_icon(x1, y1, x2, y2)
-            if pointInRect(gMouseX, gMouseY, x1_c, y1_c, x2_c, y2_c):
-                return True
-    return False
-
-
 def edit_bbox(obj_to_edit, action):
     ''' action = `delete`
                  `change_class:new_class_index`
@@ -721,10 +711,6 @@ def mouse_listener(event, x, y, flags, param):
         if dragBBox.anchor_being_dragged is None:
             if gPoint1[0] == -1:
                 if gIsBboxSelected:
-                    if is_mouse_inside_delete_button():
-                        select_bbox_under_mouse(True)
-                        obj_to_edit = gImgObjects[gSelectedBbox]
-                        edit_bbox(obj_to_edit, 'delete')
                     gIsBboxSelected = False
                     gRedrawNeeded = True
                 else:
