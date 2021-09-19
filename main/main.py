@@ -67,7 +67,7 @@ class TaggedObject:
         self.name : str = None
 
     def __eq__(self, other):
-        return self.classIdx == other.classIdx and self.bbox == other.bbox
+        return other is not None and self.bbox == other.bbox
 
     @staticmethod
     def fromYoloLine( yoloLine: str ) -> TaggedObject:
@@ -84,8 +84,55 @@ class TaggedObject:
         return ' '.join(yolo_info)
 
 
+class TaggedObjectManager:
+    def __init__(self):
+        self.tracker : ObjectTracker = None
+        self._objectList : list[TaggedObject]  = []
+        self._objectIds : list[int] = []
+        self._selectedIdx : int = -1
 
-gImgObjects: list[TaggedObject] = []
+    def SelectNext(self) -> TaggedObject:
+        if self._selectedIdx < len(self._objectList) - 1:
+            self._selectedIdx += 1
+        else:
+            self._selectedIdx = 0
+
+    def SelectPrev(self) -> TaggedObject:
+        if self._selectedIdx > 0:
+            self._selectedIdx = min( self._selectedIdx - 1, len(self._objectList) - 1 )
+        else:
+            self._selectedIdx = len(self._objectList) - 1
+
+    @property
+    def objectList( self ):
+        return self._objectList
+
+    @objectList.setter
+    def objectList(self, objects : list[TaggedObject] ):
+        prevSelObj = self.selectedObject
+        self._objectList = objects.copy()
+        self.selectedObject = prevSelObj
+
+    @property
+    def selectedObject( self ):
+        if self._selectedIdx == -1:
+            return None
+        return self.objectList[self._selectedIdx]
+
+    @selectedObject.setter
+    def selectedObject( self, obj : TaggedObject ):
+        if obj is None:
+            self._selectedIdx = -1
+        else:
+            try:
+                self._selectedIdx = self.objectList.index(obj)
+            except ValueError:
+                print(f"Failed to set selected item to {obj}")
+                self.selectedObject = None
+
+
+
+gObjManager : TaggedObjectManager = TaggedObjectManager()
 
 INPUT_DIR  = args.input_dir
 OUTPUT_DIR = args.output_dir
@@ -106,8 +153,6 @@ TRACKER_DIR = os.path.join(OUTPUT_DIR, '.tracker')
 DRAW_FROM_PASCAL = args.draw_from_PASCAL_files
 
 # selected bounding box
-gIsBboxSelected = False
-gSelectedBbox = -1
 LINE_THICKNESS = args.thickness
 ZOOM_RADIUS = 100
 ZOOM_STEP = 5
@@ -223,7 +268,6 @@ class dragBBox:
             if change_was_made:
                 action = "resize_bbox:{}:{}:{}:{}".format(x_left, y_top, x_right, y_bottom)
                 dragBBox.selected_object = edit_bbox(dragBBox.selected_object, action)
-                gRedrawNeeded = True
 
     '''
     \brief This method will reset this class
@@ -246,11 +290,10 @@ def get_img_path( idx = None ):
     return IMAGE_PATH_LIST[idx]
 
 def set_img_index(x):
-    global gImgIdx, gOrigImg, gImgObjects, gIsBboxSelected, gRedrawNeeded
+    global gImgIdx, gOrigImg, gObjManager, gRedrawNeeded
     gImgIdx = x
     img_path = get_img_path()
     gOrigImg = cv2.imread(img_path)
-    gIsBboxSelected = False
     gRedrawNeeded = True
     text = 'Showing image {}/{}, path: {}'.format(str(gImgIdx), str(last_img_index), img_path)
     display_text(text, 1000)
@@ -262,7 +305,8 @@ def set_img_index(x):
     img_height, img_width, depth = (str(number) for number in gOrigImg.shape)
 
     annotation_paths = get_annotation_paths(img_path, annotation_formats)
-    gImgObjects = read_objects_from_file( annotation_paths )
+    gObjManager.objectList = read_objects_from_file( annotation_paths )
+    gObjManager.selectedObject = None
     for ann_path in annotation_paths:
         if not os.path.isfile(ann_path):
             if '.txt' in ann_path:
@@ -449,13 +493,14 @@ def draw_bbox_anchors(tmp_img, xmin, ymin, xmax, ymax, color):
     return tmp_img
 
 def draw_bboxes_from_file(tmp_img, annotation_paths, class_filter = None ):
-    global gImgObjects
-    gImgObjects = read_objects_from_file( annotation_paths )
-    return draw_bboxes( tmp_img, gImgObjects, class_filter = class_filter)
+    global gObjManager
+    gObjManager.objectList = read_objects_from_file( annotation_paths )
+    return draw_bboxes( tmp_img, gObjManager.objectList, class_filter = class_filter)
 
-def read_objects_from_file( annotation_paths ):
+def read_objects_from_file( annotation_paths ) -> list[TaggedObject]:
     global gOrigImg
-    fileObjects = []
+    fileObjects : list[TaggedObject] = []
+
     ann_path = None
     if DRAW_FROM_PASCAL:
         # Read objects from PASCAL file
@@ -486,17 +531,16 @@ def read_objects_from_file( annotation_paths ):
 
 
 def draw_bboxes( img, objects: list[TaggedObject], class_filter = None ):
-    global gIsBboxSelected, gSelectedBbox
+    global gObjManager, gOrigImg
     imgY, imgX = gOrigImg.shape[:2]
-    for idx,obj in enumerate(objects):
+    for obj in objects:
         class_idx = obj.classIdx
         x1, y1, x2, y2 = obj.bbox.asX1Y1X2Y2( imgX, imgY )
         color = class_rgb[class_idx].tolist()
 
         # draw resizing anchors if the object is selected
-        if gIsBboxSelected:
-            if idx == gSelectedBbox:
-                img = draw_bbox_anchors(img, x1, y1, x2, y2, color)
+        if obj == gObjManager.selectedObject:
+            img = draw_bbox_anchors(img, x1, y1, x2, y2, color)
 
         # draw bbox
         if class_filter is None or class_filter == class_idx:
@@ -515,13 +559,13 @@ def get_bbox_area(x1, y1, x2, y2):
 
 
 def select_bbox_under_mouse(set_class):
-    global gImgObjects, gOrigImg
+    global gObjManager, gOrigImg
 
     imgY, imgX = gOrigImg.shape[:2]
     smallest_area = -1
-    selected_idx = None
+    selected_obj : TaggedObject = None
     # if clicked inside multiple bboxes selects the smallest one
-    for idx, obj in enumerate(gImgObjects):
+    for idx, obj in enumerate(gObjManager.objectList):
         x1, y1, x2, y2 = obj.bbox.asX1Y1X2Y2( imgX, imgY )
         x1 = x1 - dragBBox.sRA
         y1 = y1 - dragBBox.sRA
@@ -531,20 +575,19 @@ def select_bbox_under_mouse(set_class):
             tmp_area = get_bbox_area(x1, y1, x2, y2)
             if tmp_area < smallest_area or smallest_area == -1:
                 smallest_area = tmp_area
-                selected_idx = idx
+                selected_obj = obj
 
-    if selected_idx is not None:
-        obj = gImgObjects[selected_idx]
-        set_selected_bbox( selected_idx, obj.classIdx )
+    if selected_obj is not None:
+        set_selected_object( selected_obj, True )
 
-def set_selected_bbox(idx, select_class = None):
-    global gSelectedBbox, gRedrawNeeded, gIsBboxSelected
-    gSelectedBbox = idx
-    if select_class is not None:
+def set_selected_object(obj: TaggedObject, select_class = False):
+    global gObjManager, gRedrawNeeded
+    gObjManager.selectedObject = obj
+
+    if select_class:
         # set class to the one of the selected bounding box
-        cv2.setTrackbarPos(TRACKBAR_CLASS, WINDOW_NAME, select_class)
+        cv2.setTrackbarPos(TRACKBAR_CLASS, WINDOW_NAME, obj.classIdx)
     gRedrawNeeded = True
-    gIsBboxSelected = True
 
 
 
@@ -553,7 +596,7 @@ def edit_bbox(obj_to_edit: TaggedObject, action):
                  `change_class:new_class_index`
                  `resize_bbox:new_x_left:new_y_top:new_x_right:new_y_bottom`
     '''
-    global gOrigImg
+    global gOrigImg, gObjManager, gRedrawNeeded
     imgY, imgX = gOrigImg.shape[:2]
 
     modified_obj = copy.copy(obj_to_edit)
@@ -578,14 +621,9 @@ def edit_bbox(obj_to_edit: TaggedObject, action):
             with open(ann_path, 'r') as old_file:
                 lines = old_file.readlines()
 
-            try:
-                ind = gImgObjects.index( obj_to_edit )
-            except Exception as e:
-                print(e)
-
             with open(ann_path, 'w') as new_file:
-                for i,line in enumerate(lines):
-                    if i != ind:
+                for line in lines:
+                    if obj_to_edit != TaggedObject.fromYoloLine( line ):
                         # If not the object to edit then just copy it
                         new_file.write(line)
                     elif modified_obj:
@@ -622,12 +660,20 @@ def edit_bbox(obj_to_edit: TaggedObject, action):
             xml_str = ET.tostring(annotation)
             write_xml(xml_str, ann_path)
 
+    # If we modified the currently selected object then update manager
+    if obj_to_edit == gObjManager.selectedObject:
+        if 'delete' in action:
+            gObjManager.selectedObject = None
+        else:
+            gObjManager.selectedObject = modified_obj
+
+    gRedrawNeeded = True
     return modified_obj
 
 
 def mouse_listener(event, x, y, flags, param):
     # mouse callback function
-    global gIsBboxSelected, gMouseX, gMouseY, gPoint1, gPoint2, gRedrawNeeded, gOrigImg
+    global gObjManager, gMouseX, gMouseY, gPoint1, gPoint2, gRedrawNeeded, gOrigImg
 
     if event == cv2.EVENT_MOUSEMOVE:
         gMouseX = x
@@ -640,29 +686,23 @@ def mouse_listener(event, x, y, flags, param):
     # By AlexeyGy: delete via right-click
     elif event == cv2.EVENT_RBUTTONDOWN:
         select_bbox_under_mouse(False)
-        if gIsBboxSelected:
-            obj_to_edit = gImgObjects[gSelectedBbox]
-            edit_bbox(obj_to_edit, 'delete')
-            gIsBboxSelected = False
-            gRedrawNeeded = True
+        if gObjManager.selectedObject:
+            edit_bbox(gObjManager.selectedObject, 'delete')
     # Change class to current class via middle-click
     elif event == cv2.EVENT_MBUTTONDOWN:
         select_bbox_under_mouse(False)
-        if gIsBboxSelected:
-            obj_to_edit = gImgObjects[gSelectedBbox]
-            edit_bbox(obj_to_edit, f'change_class:{gClassIdx}')
-            gIsBboxSelected = False
-            gRedrawNeeded = True
+        if gObjManager.selectedObject:
+            edit_bbox(gObjManager.selectedObject, f'change_class:{gClassIdx}')
 
     elif event == cv2.EVENT_LBUTTONDOWN:
         # Check if mouse inside on of resizing anchors of the selected bbox
-        if gIsBboxSelected:
-            dragBBox.handler_left_mouse_down(x, y, gImgObjects[gSelectedBbox])
+        if gObjManager.selectedObject:
+            dragBBox.handler_left_mouse_down(x, y, gObjManager.selectedObject)
 
         if dragBBox.anchor_being_dragged is None:
             if gPoint1[0] == -1:
-                if gIsBboxSelected:
-                    gIsBboxSelected = False
+                if gObjManager.selectedObject:
+                    gObjManager.selectedObject = None
                     gRedrawNeeded = True
                 else:
                     # first click (start drawing a bounding box or delete an item)
@@ -798,6 +838,7 @@ def create_PASCAL_VOC_xml(xml_path, abs_path, folder_name, image_name, img_heigh
 
 
 def save_bounding_box(annotation_paths, bbox : BBox, class_index ):
+    global gOrigImg
     for ann_path in annotation_paths:
         if '.txt' in ann_path:
             tmp = TaggedObject()
@@ -806,7 +847,8 @@ def save_bounding_box(annotation_paths, bbox : BBox, class_index ):
             line = tmp.yoloLine()
             append_bb(ann_path, line, '.txt')
         elif '.xml' in ann_path:
-            line = voc_format(CLASS_LIST[class_index], point_1, point_2)
+            imgY, imgX = gOrigImg.shape[:2]
+            line = voc_format(CLASS_LIST[class_index], *bbox.asX1Y1X2Y2( imgX, imgY ) )
             append_bb(ann_path, line, '.xml')
 
 def is_frame_from_video(img_path):
@@ -1029,17 +1071,13 @@ def get_cropped_img( img, centerX, centerY, width, height ):
     return img[crop_top:crop_bottom, crop_left:crop_right]
 
 
-# Backup current annotations and then clear them
 def clear_bboxes():
-    global gImgObjects, gImgIdx
-    img_objects_bak = gImgObjects.copy()
-
+    global gImgIdx
     img_path = get_img_path()
     for path in get_annotation_paths(img_path, annotation_formats):
         if os.path.exists( path ):
             os.remove( path )
     set_img_index( gImgIdx )
-    return img_objects_bak
 
 
 def restore_bboxes( img, annotation_paths, img_objects: list[TaggedObject] ):
@@ -1301,7 +1339,7 @@ if __name__ == '__main__':
             dragBBox.handler_mouse_move(gMouseX, gMouseY)
 
         # if bounding box is selected add extra info
-        if gIsBboxSelected:
+        if gObjManager.selectedObject:
             tmp_img = draw_info_bb_selected(tmp_img)
         # if first click
         if gPoint1[0] != -1:
@@ -1310,7 +1348,7 @@ if __name__ == '__main__':
             # if second click
             if gPoint2[0] != -1:
                 # save the bounding box
-                bbox = BBox.fromX1Y1WH( *gPoint1, *gPoint2, width, height)
+                bbox = BBox.fromX1Y1X2Y2( *gPoint1, *gPoint2, width, height)
                 save_bounding_box(annotation_paths, bbox, gClassIdx)
                 # reset the points
                 gPoint1 = (-1, -1)
@@ -1370,17 +1408,14 @@ if __name__ == '__main__':
             elif pressed_key in [ord('e'), ord('q')]:
                 # change down current class key listener
                 if pressed_key == ord('e'):
-                    gClassIdx = decrease_index(gClassIdx, last_class_index)
+                    gClassIdx = increase_index(gClassIdx, last_class_index)
                 # change up current class key listener
                 elif pressed_key == ord('q'):
-                    gClassIdx = increase_index(gClassIdx, last_class_index)
-                draw_line(tmp_img, gMouseX, gMouseY, height, width, color)
+                    gClassIdx = decrease_index(gClassIdx, last_class_index)
                 set_class_index(gClassIdx)
                 cv2.setTrackbarPos(TRACKBAR_CLASS, WINDOW_NAME, gClassIdx)
-                if gIsBboxSelected:
-                    matched_obj = gImgObjects[gSelectedBbox]
-                    edit_bbox(matched_obj, 'change_class:{}'.format(gClassIdx))
-                    gRedrawNeeded = True
+                if gObjManager.selectedObject:
+                    edit_bbox(gObjManager.selectedObject, 'change_class:{}'.format(gClassIdx))
             # help key listener
             elif pressed_key == ord('h'):
                 text = ('[z] to show edges;\n'
@@ -1415,10 +1450,9 @@ if __name__ == '__main__':
                 show_only_active_class = not show_only_active_class
                 display_text( f"Show only active class bboxes turned {'ON' if show_only_active_class else 'OFF'}!", 1000)
                 gRedrawNeeded = True
-            elif gIsBboxSelected and pressed_key in [ ord('a'), ord('A'), ord('w'), ord('W'), ord('d'), ord('D'), ord('s'), ord('S') ]:
+            elif gObjManager.selectedObject and pressed_key in [ ord('a'), ord('A'), ord('w'), ord('W'), ord('d'), ord('D'), ord('s'), ord('S') ]:
                 imgY, imgX = gOrigImg.shape[:2]
-                selectedObj = gImgObjects[gSelectedBbox]
-                left, top, right, bottom = selectedObj.bbox.asX1Y1X2Y2(imgX, imgY)
+                left, top, right, bottom = gObjManager.selectedObject.bbox.asX1Y1X2Y2(imgX, imgY)
                 offset = 3
                 if pressed_key == ord('a'):
                     left -= offset
@@ -1438,23 +1472,14 @@ if __name__ == '__main__':
                     bottom -= offset
 
                 action = "resize_bbox:{}:{}:{}:{}".format(left, top, right, bottom)
-                edit_bbox(selectedObj, action)
-                gRedrawNeeded = True
+                edit_bbox(gObjManager.selectedObject, action)
 
             elif pressed_key in [ord('`'), ord('~')]:
-                if gSelectedBbox < 0:
-                    nextBbox = 0
-                elif pressed_key == ord('`'):
-                    nextBbox = gSelectedBbox - 1
-                    if nextBbox < 0:
-                        nextBbox = len(gImgObjects) - 1
+                if pressed_key == ord('`'):
+                    gObjManager.SelectPrev()
                 elif pressed_key == ord('~'):
-                    nextBbox = gSelectedBbox + 1
-                    if nextBbox >= len(gImgObjects):
-                        nextBbox = 0
-
-                set_selected_bbox(nextBbox)
-
+                    gObjManager.SelectNext()
+                gRedrawNeeded = True
             elif pressed_key == ord('y') and yolo is not None:
                 clear_bboxes()
                 yoloDetections = run_yolo( gOrigImg, yolo )
@@ -1476,12 +1501,12 @@ if __name__ == '__main__':
             elif pressed_key == ord('P') or pressed_key == ord('p') or pressed_key == ord('0'):
                 singleFrame = ( pressed_key == ord('p') )
                 deleteBbox = ( pressed_key == ord('0') )
-                selected_obj = None
+                selected_obj = gObjManager.selectedObject
                 # check if the image is a frame from a video
                 is_from_video, video_name = is_frame_from_video(img_path)
-                if is_from_video and ( gSelectedBbox != -1 or deleteBbox == False ):
+                if is_from_video and ( selected_obj or deleteBbox == False ):
                     # get list of objects associated to that frame
-                    object_list = gImgObjects
+                    object_list = gObjManager.objectList
                     origImgIdx = gImgIdx
 
                     object_tracker = ObjectTracker("CSRT")
@@ -1493,15 +1518,14 @@ if __name__ == '__main__':
                             gImgIdx = decrease_index(gImgIdx, last_img_index)
                             cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, gImgIdx)
                             imgPath = get_img_path()
-                            object_list = gImgObjects
+                            object_list = gObjManager.objectList
                             if len(object_list) > 0 or singleFrameIdx == gImgIdx:
                                 break
-                    elif gIsBboxSelected:
+                    elif selected_obj:
                         # Track an object, but delete it each frame
-                        selected_obj = object_list[gSelectedBbox]
                         object_list = [selected_obj]
                         if deleteBbox:
-                            edit_bbox(selected_obj, 'delete')
+                            edit_bbox(object_list[0], 'delete')
 
 
                     if len(object_list) == 0:
@@ -1509,7 +1533,7 @@ if __name__ == '__main__':
                     else:
                         # Initialize trackers with the current frames annotated bounding boxes
                         object_tracker.setImage( gOrigImg )
-                        object_bboxes = [ obj.bbox.asRX1Y1WH() for obj in object_list ]
+                        object_bboxes = [ obj.bbox for obj in object_list ]
                         object_metadata = [{ 'class': obj.classIdx} for obj in object_list]
                         object_tracker.updateDetections( object_bboxes, object_metadata )
 
@@ -1538,10 +1562,10 @@ if __name__ == '__main__':
                             object_tracker.setImage( gOrigImg )
                             objects = object_tracker.update()
 
-                            if len(gImgObjects) > 0:
-                                # Deal with existing annotations                                a.asYolo
-                                annotated_bboxes = [ obj.bbox.asYolo() for obj in gImgObjects]
-                                object_metadata = [{ 'class': obj.classIdx} for obj in gImgObjects]
+                            if len(gObjManager.objectList) > 0:
+                                # Deal with existing annotations
+                                annotated_bboxes = [ obj.bbox for obj in gObjManager.objectList]
+                                object_metadata = [{ 'class': obj.classIdx} for obj in gObjManager.objectList]
                                 updatedBoxes, matchedIds, unmatchedIds = object_tracker.matchDetections( annotated_bboxes, object_metadata )
 
                                 # Initially don't add any tracked objects
@@ -1556,7 +1580,7 @@ if __name__ == '__main__':
                                     if trackerId is not None:
                                         if selected_obj is not None:
                                             # This must match our selected box
-                                            matched_obj = gImgObjects[idx]
+                                            matched_obj = gObjManager.objectList[idx]
                                             if matched_obj.classIdx == selected_obj.classIdx:
                                                 if deleteBbox:
                                                     edit_bbox(matched_obj, 'delete')
@@ -1584,9 +1608,8 @@ if __name__ == '__main__':
                             for trackerId,shouldAdd in trackedIdsToAdd.items():
                                 if shouldAdd:
                                     tracker = object_tracker._trackers[trackerId]
-                                    bbox = BBox.fromRX1Y1WH( *tracker.lastSeen )
                                     classId = int( tracker.metadata['class'] )
-                                    save_bounding_box( annotation_paths, bbox, classId )
+                                    save_bounding_box( annotation_paths, tracker.lastSeen, classId )
 
                             dbgImg = img.copy()
                             draw_bboxes_from_file( dbgImg, annotation_paths )
