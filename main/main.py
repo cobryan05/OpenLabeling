@@ -1441,6 +1441,7 @@ if __name__ == '__main__':
                 if gIsBboxSelected:
                     matched_obj = gImgObjects[gSelectedBbox]
                     edit_bbox(matched_obj, 'change_class:{}'.format(gClassIdx))
+                    gRedrawNeeded = True
             # help key listener
             elif pressed_key == ord('h'):
                 text = ('[z] to show edges;\n'
