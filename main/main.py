@@ -719,12 +719,11 @@ def edit_bbox(obj_to_edit: TaggedObject, action):
             xml_str = ET.tostring(annotation)
             write_xml(xml_str, ann_path)
 
-    # If we modified the currently selected object then update manager
-    if obj_to_edit == gObjManager.selectedObject:
-        if 'delete' in action:
+    # Update the manager if we deleted an object
+    if 'delete' in action:
+        if obj_to_edit == gObjManager.selectedObject:
             gObjManager.selectedObject = None
-        else:
-            gObjManager.selectedObject = modified_obj
+        gObjManager.objectList.remove( obj_to_edit )
 
     gRedrawNeeded = True
     return modified_obj
@@ -1131,12 +1130,12 @@ def get_cropped_img( img, centerX, centerY, width, height ):
 
 
 def clear_bboxes():
-    global gImgIdx
+    global gRedrawNeeded
     img_path = get_img_path()
     for path in get_annotation_paths(img_path, annotation_formats):
         if os.path.exists( path ):
             os.remove( path )
-    set_img_index( gImgIdx )
+    gObjManager.objectList = []
 
 
 def restore_bboxes( img, annotation_paths, img_objects: list[TaggedObject] ):
@@ -1378,7 +1377,7 @@ if __name__ == '__main__':
             # get annotation paths
             img_path = get_img_path()
             annotation_paths = get_annotation_paths(img_path, annotation_formats)
-            base_img = draw_bboxes_from_file(base_img, annotation_paths, class_filter)
+            base_img = draw_bboxes( base_img, gObjManager.objectList, class_filter)
 
         tmp_img = base_img.copy()
         # draw vertical and horizontal guide lines
@@ -1549,15 +1548,17 @@ if __name__ == '__main__':
                 clear_bboxes()
                 yoloDetections = run_yolo( gOrigImg, yolo )
                 imgY, imgX = gOrigImg.shape[:2]
-                newObjects: list[TaggedObject] = []
+                yoloObjects: list[TaggedObject] = []
                 for det in yoloDetections:
                     newObject = TaggedObject()
                     newObject.classIdx = det[0]
                     newObject.bbox = BBox.fromX1Y1X2Y2( *det[1:], imgX, imgY )
+                    newObject.name = CLASS_LIST[newObject.classIdx]
 
-                    newObjects.append(newObject)
+                    yoloObjects.append(newObject)
 
-                restore_bboxes( tmp_img, annotation_paths, newObjects )
+                gObjManager.objectList = yoloObjects
+                restore_bboxes( tmp_img, annotation_paths, yoloObjects )
 
             # elif pressed_key == ord('u'):
             #     tmp = gImgObjects.copy() # TODO: gImgObjects
