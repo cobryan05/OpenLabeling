@@ -142,24 +142,26 @@ class TaggedObjectManager:
 
 
     def trackNewImage( self, img : np.ndarray, trackByClass : bool = True ):
+        if self._tracker is None:
+            return
+
         # Set the new image and update the tracker
         self._tracker.setImage( img )
         trackerResults = self._tracker.update()
 
-        idsToRemove = []
         # First try to match up existing boxes
         for obj in self.objectList:
             for id,bbox in trackerResults.items():
+                if bbox is None:
+                    continue
                 if bbox.similar(obj.bbox, epsilon=.2):
                     obj.trackerId = id
-                    idsToRemove.append(id)
+                    trackerResults.pop(id)
                     break
-        for id in idsToRemove:
-            trackerResults.pop(id)
 
         # Do another pass, matching unmatched boxes by classIdx
         if trackByClass:
-            idsToRemove = []
+            idsToRemove = set()
             for id,bbox in trackerResults.items():
                 prevTrackedObj = self._trackedObjects.get(id, None)
                 if prevTrackedObj:
@@ -167,20 +169,20 @@ class TaggedObjectManager:
                     for obj in self.objectList:
                         if prevTrackedObj.classIdx == obj.classIdx and obj.trackerId == -1: # TODO: We don't initialize the id
                             obj.trackerId = id
-                            idsToRemove.append(id)
+                            idsToRemove.add(id)
                             break
             for id in idsToRemove:
                 trackerResults.pop(id)
 
         # Now add any new boxes tracked in
-        idsToRemove = []
+        idsToRemove = set()
         for id,bbox in trackerResults.items():
             for id,bbox in trackerResults.items():
                 prevTrackedObj = self._trackedObjects.get(id, None)
                 if prevTrackedObj:
                     prevTrackedObj.bbox = bbox
                     self.objectList.append(prevTrackedObj)
-                    idsToRemove.append(id)
+                    idsToRemove.add(id)
         for id in idsToRemove:
             trackerResults.pop(id)
 
@@ -323,7 +325,7 @@ class dragBBox:
 
             if change_was_made:
                 action = "resize_bbox:{}:{}:{}:{}".format(x_left, y_top, x_right, y_bottom)
-                dragBBox.selected_object = edit_bbox(dragBBox.selected_object, action)
+                edit_bbox(dragBBox.selected_object, action)
 
     '''
     \brief This method will reset this class
@@ -658,19 +660,19 @@ def edit_bbox(obj_to_edit: TaggedObject, action):
     global gOrigImg, gObjManager, gRedrawNeeded
     imgY, imgX = gOrigImg.shape[:2]
 
-    modified_obj = copy.copy(obj_to_edit)
+    orig_obj = copy.copy(obj_to_edit)
 
     if 'change_class' in action:
-        modified_obj.classIdx = int(action.split(':')[1])
-        modified_obj.name = CLASS_LIST[modified_obj.classIdx]
+        obj_to_edit.classIdx = int(action.split(':')[1])
+        obj_to_edit.name = CLASS_LIST[obj_to_edit.classIdx]
     elif 'resize_bbox' in action:
         new_x_left = max(0, int(action.split(':')[1]))
         new_y_top = max(0, int(action.split(':')[2]))
         new_x_right = min(imgX, int(action.split(':')[3]))
         new_y_bottom = min(imgY, int(action.split(':')[4]))
-        modified_obj.bbox = BBox.fromX1Y1X2Y2( new_x_left, new_y_top, new_x_right, new_y_bottom, imgX, imgY )
+        obj_to_edit.bbox = BBox.fromX1Y1X2Y2( new_x_left, new_y_top, new_x_right, new_y_bottom, imgX, imgY )
     else:
-        modified_obj = None
+        obj_to_edit = None
 
     current_img_path = get_img_path()
 
@@ -682,19 +684,19 @@ def edit_bbox(obj_to_edit: TaggedObject, action):
 
             with open(ann_path, 'w') as new_file:
                 for line in lines:
-                    if obj_to_edit != TaggedObject.fromYoloLine( line ):
+                    if orig_obj != TaggedObject.fromYoloLine( line ):
                         # If not the object to edit then just copy it
                         new_file.write(line)
-                    elif modified_obj:
-                        new_yolo_line = modified_obj.yoloLine()
+                    elif obj_to_edit:
+                        new_yolo_line = obj_to_edit.yoloLine()
                         new_file.write(new_yolo_line + '\n')
 
         elif '.xml' in ann_path:
             # edit PASCAL VOC file
             tree = ET.parse(ann_path)
             annotation = tree.getroot()
-            class_index = obj_to_edit.classIdx
-            xmin, ymin, xmax, ymax = obj_to_edit.bbox.asX1Y1X2Y2(imgX, imgY)
+            class_index = orig_obj.classIdx
+            xmin, ymin, xmax, ymax = orig_obj.bbox.asX1Y1X2Y2(imgX, imgY)
             for obj in annotation.findall('object'):
                 class_name_xml, class_index_xml, xmin_xml, ymin_xml, xmax_xml, ymax_xml = get_xml_object_data(obj)
                 if ( class_index == class_index_xml and
@@ -707,7 +709,7 @@ def edit_bbox(obj_to_edit: TaggedObject, action):
                     elif 'change_class' in action:
                         # edit object class name
                         object_class = obj.find('name')
-                        object_class.text = CLASS_LIST[modified_obj.classIdx]
+                        object_class.text = CLASS_LIST[obj_to_edit.classIdx]
                     elif 'resize_bbox' in action:
                         object_bbox = obj.find('bndbox')
                         object_bbox.find('xmin').text = str(new_x_left)
@@ -721,12 +723,11 @@ def edit_bbox(obj_to_edit: TaggedObject, action):
 
     # Update the manager if we deleted an object
     if 'delete' in action:
-        if obj_to_edit == gObjManager.selectedObject:
+        if orig_obj == gObjManager.selectedObject:
             gObjManager.selectedObject = None
-        gObjManager.objectList.remove( obj_to_edit )
+        gObjManager.objectList.remove( orig_obj )
 
     gRedrawNeeded = True
-    return modified_obj
 
 
 def mouse_listener(event, x, y, flags, param):
@@ -1129,16 +1130,16 @@ def get_cropped_img( img, centerX, centerY, width, height ):
     return img[crop_top:crop_bottom, crop_left:crop_right]
 
 
-def clear_bboxes():
-    global gRedrawNeeded
+def remove_annotation_file():
     img_path = get_img_path()
     for path in get_annotation_paths(img_path, ANNOTATION_FORMATS):
         if os.path.exists( path ):
             os.remove( path )
-    gObjManager.objectList = []
 
 
-def restore_bboxes( img, annotation_paths, img_objects: list[TaggedObject] ):
+def restore_bboxes( img, img_objects: list[TaggedObject] ):
+    img_path = get_img_path()
+    annotation_paths = get_annotation_paths(img_path, ANNOTATION_FORMATS)
     for obj in img_objects:
         save_bounding_box(annotation_paths, obj.bbox, obj.classIdx)
 
@@ -1407,6 +1408,12 @@ if __name__ == '__main__':
             if gPoint2[0] != -1:
                 # save the bounding box
                 bbox = BBox.fromX1Y1X2Y2( *gPoint1, *gPoint2, width, height)
+
+                newObject = TaggedObject()
+                newObject.bbox = bbox
+                newObject.classIdx = gClassIdx
+                newObject.name = CLASS_LIST[gClassIdx]
+                gObjManager.objectList.append(newObject)
                 save_bounding_box(annotation_paths, bbox, gClassIdx)
                 # reset the points
                 gPoint1 = (-1, -1)
@@ -1468,6 +1475,8 @@ if __name__ == '__main__':
                 gRedrawNeeded = True
             elif pressed_key == ord('O'):
                 gObjManager.trackNewImage( gOrigImg )
+                remove_annotation_file()
+                restore_bboxes( gOrigImg, gObjManager.objectList)
                 gRedrawNeeded = True
             elif pressed_key in [ord('e'), ord('q')]:
                 # change down current class key listener
@@ -1537,6 +1546,7 @@ if __name__ == '__main__':
 
                 action = "resize_bbox:{}:{}:{}:{}".format(left, top, right, bottom)
                 edit_bbox(gObjManager.selectedObject, action)
+                gRedrawNeeded = True
 
             elif pressed_key in [ord('`'), ord('~')]:
                 if pressed_key == ord('`'):
@@ -1545,7 +1555,7 @@ if __name__ == '__main__':
                     gObjManager.SelectNext()
                 gRedrawNeeded = True
             elif pressed_key == ord('y') and yolo is not None:
-                clear_bboxes()
+                remove_annotation_file()
                 yoloDetections = run_yolo( gOrigImg, yolo )
                 imgY, imgX = gOrigImg.shape[:2]
                 yoloObjects: list[TaggedObject] = []
@@ -1558,7 +1568,7 @@ if __name__ == '__main__':
                     yoloObjects.append(newObject)
 
                 gObjManager.objectList = yoloObjects
-                restore_bboxes( tmp_img, annotation_paths, yoloObjects )
+                restore_bboxes( tmp_img, gObjManager.objectList )
 
             # elif pressed_key == ord('u'):
             #     tmp = gImgObjects.copy() # TODO: gImgObjects
