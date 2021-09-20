@@ -648,7 +648,7 @@ def select_bbox_under_mouse(set_class):
                 selected_obj = obj
 
     if selected_obj is not None:
-        set_selected_object( selected_obj, True )
+        set_selected_object( selected_obj, set_class )
 
 def set_selected_object(obj: TaggedObject, select_class = False):
     global gObjManager, gRedrawNeeded
