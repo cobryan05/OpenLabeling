@@ -66,6 +66,7 @@ class TaggedObject:
         self.classIdx : int = -1
         self.name : str = None
         self.trackerId : int = -1
+        self.fixed : bool = False
 
     def __eq__(self, other):
         return other is not None and self.bbox == other.bbox
@@ -180,7 +181,8 @@ class TaggedObjectManager:
             for id,bbox in trackerResults.items():
                 prevTrackedObj = self._trackedObjects.get(id, None)
                 if prevTrackedObj:
-                    prevTrackedObj.bbox = bbox
+                    if not prevTrackedObj.fixed:
+                        prevTrackedObj.bbox = bbox
                     self.objectList.append(prevTrackedObj)
                     idsToRemove.add(id)
         for id in idsToRemove:
@@ -608,6 +610,8 @@ def draw_bboxes( img, objects: list[TaggedObject], class_filter = None ):
                 label = f"{obj.name}"
                 if obj.trackerId != -1:
                     label = f"Id: {obj.trackerId} - {label}"
+                if obj.fixed:
+                    label = f"[F] {label}"
                 cv2.putText(img, label, (x1, y1 - 5), font, 0.6, color, LINE_THICKNESS, cv2.LINE_AA)
     return img
 
@@ -1438,7 +1442,7 @@ if __name__ == '__main__':
                 else:
                     play_video = False
 
-        if dragBBox.anchor_being_dragged is None:
+        if pressed_key != -1 and dragBBox.anchor_being_dragged is None:
             ''' Key Listeners START '''
             if pressed_key in [ ord('['), ord('{'), ord(']'), ord('}') ]:
                 # show previous image key listener
@@ -1522,6 +1526,9 @@ if __name__ == '__main__':
             elif pressed_key == ord('c'):
                 show_only_active_class = not show_only_active_class
                 display_text( f"Show only active class bboxes turned {'ON' if show_only_active_class else 'OFF'}!", 1000)
+                gRedrawNeeded = True
+            elif gObjManager.selectedObject and pressed_key == ord('='):
+                gObjManager.selectedObject.fixed = not gObjManager.selectedObject.fixed
                 gRedrawNeeded = True
             elif gObjManager.selectedObject and pressed_key in [ ord('a'), ord('A'), ord('w'), ord('W'), ord('d'), ord('D'), ord('s'), ord('S') ]:
                 imgY, imgX = gOrigImg.shape[:2]
