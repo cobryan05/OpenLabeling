@@ -1057,24 +1057,28 @@ def run_tracker( selectedObj : TaggedObject, singleFrame : bool, deleteInFrames:
 
     object_list = gObjManager.objectList
 
-    # Grab objects from previous frame if just single-frame
     if singleFrame:
-        singleFrameIdx = gImgIdx
-        # Scan back for a frame that has annotations
-        while True:
-            gImgIdx = decrease_index(gImgIdx, last_img_index)
-            cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, gImgIdx)
-            imgPath = get_img_path()
-            object_list = gObjManager.objectList
-            if len(object_list) > 0 or singleFrameIdx == gImgIdx:
-                break
+        # Scan back frames to find annotations if no object selected
+        if selectedObj is None:
+            singleFrameIdx = gImgIdx
+            # Scan back for a frame that has annotations
+            while True:
+                gImgIdx = decrease_index(gImgIdx, last_img_index)
+                cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, gImgIdx)
+                imgPath = get_img_path()
+                object_list = gObjManager.objectList
+                if len(object_list) > 0 or singleFrameIdx == gImgIdx:
+                    break
+        else:
+            # Track the selected object forward into the next frame
+            pass
     elif selectedObj:
         # Track an object, but delete it each frame
         object_list = [selectedObj]
         if deleteBbox:
             edit_bbox(object_list[0], 'delete')
 
-
+    curSelObj = selectedObj
     if len(object_list) == 0:
         print(f"Can't track video objects when no objects are marked in current frame")
     else:
@@ -1089,7 +1093,7 @@ def run_tracker( selectedObj : TaggedObject, singleFrame : bool, deleteInFrames:
 
         # If only processing a single frame we may have rewound quite a bit before finding an annotated frame.
         #  Put us back to 1 before our active frame
-        if singleFrame:
+        if singleFrame and curSelObj is None:
             gImgIdx = decrease_index(singleFrameIdx, last_img_index )
 
         # Iterate through all of the remaining video frames
@@ -1104,21 +1108,21 @@ def run_tracker( selectedObj : TaggedObject, singleFrame : bool, deleteInFrames:
 
             # If a selected object is tracked then try to update it to current image objects
             newSelectedObj = None
-            if selectedObj:
-                similarObjs = gObjManager.getSimilarObjects( selectedObj.bbox, epsilon=.1 )
+            if curSelObj:
+                similarObjs = gObjManager.getSimilarObjects( curSelObj.bbox, epsilon=.1 )
                 if len(similarObjs) == 1:
                     newSelectedObj = similarObjs[0]
-            selectedObj = newSelectedObj
+            curSelObj = newSelectedObj
 
 
             if deleteInFrames:
                 # If deleting and there is a similar object, delete it. Otherwise break the loop
-                if selectedObj:
-                    edit_bbox( selectedObj, 'delete' )
+                if curSelObj:
+                    edit_bbox( curSelObj, 'delete' )
                 else:
                     exitLoop = True
             else:
-                if selectedObj:
+                if curSelObj:
                     exitLoop = True # This object is already in this frame
                 else:
                     # Update the image with all tracked boxes
@@ -1129,6 +1133,10 @@ def run_tracker( selectedObj : TaggedObject, singleFrame : bool, deleteInFrames:
                             gObjManager.objectList.append(trackedObj)
                             edit_bbox( trackedObj, 'add' )
 
+                            # Track forward - TODO: Not so hacky
+                            if selectedObj and singleFrame:
+                                gObjManager.selectedObject = trackedObj
+                                exitLoop = True
             # Show image
             dbgImg = gOrigImg.copy()
             draw_bboxes( dbgImg, gObjManager.objectList )
