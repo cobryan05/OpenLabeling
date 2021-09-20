@@ -65,6 +65,7 @@ class TaggedObject:
         self.bbox : BBox = None
         self.classIdx : int = -1
         self.name : str = None
+        self.trackerId : int = -1
 
     def __eq__(self, other):
         return other is not None and self.bbox == other.bbox
@@ -86,9 +87,9 @@ class TaggedObject:
 
 class TaggedObjectManager:
     def __init__(self):
-        self.tracker : ObjectTracker = None
+        self._tracker : ObjectTracker = None
+        self._trackedObjects : dict[int, TaggedObject] = {}
         self._objectList : list[TaggedObject]  = []
-        self._objectIds : list[int] = []
         self._selectedIdx : int = -1
 
     def SelectNext(self) -> TaggedObject:
@@ -130,6 +131,61 @@ class TaggedObjectManager:
                 print(f"Failed to set selected item to {obj}")
                 self.selectedObject = None
 
+
+    def initObjectTracker( self, img : np.ndarray, trackerType:str = "CSRT" ):
+        self._tracker = ObjectTracker( trackerType )
+        self._trackedObjects = {}
+        self._tracker.setImage( img )
+        for obj in self.objectList:
+            obj.trackerId = self._tracker.addObject( obj.bbox )
+            self._trackedObjects[obj.trackerId] = obj
+
+
+    def trackNewImage( self, img : np.ndarray, trackByClass : bool = True ):
+        # Set the new image and update the tracker
+        self._tracker.setImage( img )
+        trackerResults = self._tracker.update()
+
+        idsToRemove = []
+        # First try to match up existing boxes
+        for obj in self.objectList:
+            for id,bbox in trackerResults.items():
+                if bbox.similar(obj.bbox, epsilon=.2):
+                    obj.trackerId = id
+                    idsToRemove.append(id)
+                    break
+        for id in idsToRemove:
+            trackerResults.pop(id)
+
+        # Do another pass, matching unmatched boxes by classIdx
+        if trackByClass:
+            idsToRemove = []
+            for id,bbox in trackerResults.items():
+                prevTrackedObj = self._trackedObjects.get(id, None)
+                if prevTrackedObj:
+                    # Attempt to find an untracked object by class before creating a new one
+                    for obj in self.objectList:
+                        if prevTrackedObj.classIdx == obj.classIdx and obj.trackerId == -1: # TODO: We don't initialize the id
+                            obj.trackerId = id
+                            idsToRemove.append(id)
+                            break
+            for id in idsToRemove:
+                trackerResults.pop(id)
+
+        # Now add any new boxes tracked in
+        idsToRemove = []
+        for id,bbox in trackerResults.items():
+            for id,bbox in trackerResults.items():
+                prevTrackedObj = self._trackedObjects.get(id, None)
+                if prevTrackedObj:
+                    prevTrackedObj.bbox = bbox
+                    self.objectList.append(prevTrackedObj)
+                    idsToRemove.append(id)
+        for id in idsToRemove:
+            trackerResults.pop(id)
+
+        if len(trackerResults) > 0:
+            print(f"There were {len(trackerResults)} unhandled tracker results!")
 
 
 gObjManager : TaggedObjectManager = TaggedObjectManager()
@@ -547,7 +603,10 @@ def draw_bboxes( img, objects: list[TaggedObject], class_filter = None ):
             cv2.rectangle(img, (x1, y1), (x2, y2), color, LINE_THICKNESS)
             if text_on:
                 font = cv2.FONT_HERSHEY_SIMPLEX
-                cv2.putText(img, CLASS_LIST[class_idx], (x1, y1 - 5), font, 0.6, color, LINE_THICKNESS, cv2.LINE_AA)
+                label = f"{obj.name}"
+                if obj.trackerId != -1:
+                    label = f"Id: {obj.trackerId} - {label}"
+                cv2.putText(img, label, (x1, y1 - 5), font, 0.6, color, LINE_THICKNESS, cv2.LINE_AA)
     return img
 
 
@@ -1404,6 +1463,12 @@ if __name__ == '__main__':
                 gRedrawNeeded = True
             elif pressed_key == ord('m'):
                 masked_on = not masked_on
+                gRedrawNeeded = True
+            elif pressed_key == ord('o'):
+                gObjManager.initObjectTracker( gOrigImg, "CSRT")
+                gRedrawNeeded = True
+            elif pressed_key == ord('O'):
+                gObjManager.trackNewImage( gOrigImg )
                 gRedrawNeeded = True
             elif pressed_key in [ord('e'), ord('q')]:
                 # change down current class key listener
