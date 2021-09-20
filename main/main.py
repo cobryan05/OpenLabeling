@@ -2,16 +2,16 @@
 from __future__ import annotations
 
 import argparse
-import pathlib
-import json
+import copy
 import os
+import pathlib
 import re
 import sys
-import copy
 
 import cv2
 import numpy as np
 import czifile
+
 from tqdm import tqdm
 from sklearn.cluster import MiniBatchKMeans
 
@@ -25,6 +25,8 @@ from trackerTools.utils import *
 
 from lxml import etree
 import xml.etree.cElementTree as ET
+
+
 
 DELAY = 20 # keyboard delay (in milliseconds)
 WITH_QT = False
@@ -935,195 +937,6 @@ def is_frame_from_video(img_path):
     return False, None
 
 
-def get_json_file_data(json_file_path):
-    if os.path.isfile(json_file_path):
-        with open(json_file_path) as f:
-            data = json.load(f)
-            return True, data
-    else:
-        return False, {'n_anchor_ids':0, 'frame_data_dict':{}}
-
-
-def get_prev_frame_path_list(video_name, img_path):
-    first_index = VIDEO_NAME_DICT[video_name]['first_index']
-    last_index = VIDEO_NAME_DICT[video_name]['last_index']
-    img_index = IMAGE_PATH_LIST.index(img_path)
-    return IMAGE_PATH_LIST[first_index:img_index]
-
-
-def get_next_frame_path_list(video_name, img_path):
-    first_index = VIDEO_NAME_DICT[video_name]['first_index']
-    last_index = VIDEO_NAME_DICT[video_name]['last_index']
-    img_index = IMAGE_PATH_LIST.index(img_path)
-    return IMAGE_PATH_LIST[(img_index + 1):last_index]
-
-
-def get_json_object_dict(obj, json_object_list):
-    if len(json_object_list) > 0:
-        class_index, xmin, ymin, xmax, ymax = map(int, obj)
-        for d in json_object_list:
-                    if ( d['class_index'] == class_index and
-                         d['bbox']['xmin'] == xmin and
-                         d['bbox']['ymin'] == ymin and
-                         d['bbox']['xmax'] == xmax and
-                         d['bbox']['ymax'] == ymax ) :
-                        return d
-    return None
-
-
-def remove_already_tracked_objects(object_list, img_path, json_file_data):
-    frame_data_dict = json_file_data['frame_data_dict']
-    json_object_list = get_json_file_object_list(img_path, frame_data_dict)
-    # copy the list since we will be deleting elements without restarting the loop
-    temp_object_list = object_list[:]
-    for obj in temp_object_list:
-        obj_dict = get_json_object_dict(obj, json_object_list)
-        if obj_dict is not None:
-            object_list.remove(obj)
-            json_object_list.remove(obj_dict)
-    return object_list
-
-
-def get_json_file_object_by_id(json_object_list, anchor_id):
-    for obj_dict in json_object_list:
-        if obj_dict['anchor_id'] == anchor_id:
-            return obj_dict
-    return None
-
-
-def get_json_file_object_list(img_path, frame_data_dict):
-    object_list = []
-    if img_path in frame_data_dict:
-        object_list = frame_data_dict[img_path]
-    return object_list
-
-
-def json_file_add_object(frame_data_dict, img_path, anchor_id, pred_counter, obj):
-    object_list = get_json_file_object_list(img_path, frame_data_dict)
-    class_index, xmin, ymin, xmax, ymax = obj
-
-    bbox = {
-      'xmin': xmin,
-      'ymin': ymin,
-      'xmax': xmax,
-      'ymax': ymax
-    }
-
-    temp_obj = {
-      'anchor_id': anchor_id,
-      'prediction_index': pred_counter,
-      'class_index': class_index,
-      'bbox': bbox
-    }
-
-    object_list.append(temp_obj)
-    frame_data_dict[img_path] = object_list
-
-    return frame_data_dict
-
-
-class LabelTracker():
-    ''' Special thanks to Rafael Caballero Gonzalez '''
-    # extract the OpenCV version info, e.g.:
-    # OpenCV 3.3.4 -> [major_ver].[minor_ver].[subminor_ver]
-    (major_ver, minor_ver, subminor_ver) = (cv2.__version__).split('.')
-
-    # TODO: press ESC to stop the tracking process
-
-    def __init__(self, tracker_type, init_frame, next_frame_path_list):
-        tracker_types = ['CSRT', 'KCF','MOSSE', 'MIL', 'BOOSTING', 'MEDIANFLOW', 'TLD', 'GOTURN', 'DASIAMRPN']
-        ''' Recomended tracker_type:
-              KCF -> KCF is usually very good (minimum OpenCV 3.1.0)
-              CSRT -> More accurate than KCF but slightly slower (minimum OpenCV 3.4.2)
-              MOSSE -> Less accurate than KCF but very fast (minimum OpenCV 3.4.1)
-        '''
-        self.tracker_type = tracker_type
-        # -- TODO: remove this if I assume OpenCV version > 3.4.0
-        if tracker_type == tracker_types[0] or tracker_type == tracker_types[2]:
-            if int(self.major_ver == 3) and int(self.minor_ver) < 4:
-                self.tracker_type = tracker_types[1] # Use KCF instead of CSRT or MOSSE
-        # --
-        self.init_frame = init_frame
-        self.next_frame_path_list = next_frame_path_list
-
-        self.img_h, self.img_w = init_frame.shape[:2]
-
-
-    def call_tracker_constructor(self, tracker_type):
-        if tracker_type == 'DASIAMRPN':
-            tracker = dasiamrpn()
-        else:
-            # -- TODO: remove this if I assume OpenCV version > 3.4.0
-            if int(self.major_ver == 3) and int(self.minor_ver) < 3:
-                #tracker = cv2.Tracker_create(tracker_type)
-                pass
-            # --
-            else:
-                try:
-                    tracker = cv2.TrackerKCF_create()
-                except AttributeError as error:
-                    print(error)
-                    print('\nMake sure that OpenCV contribute is installed: opencv-contrib-python\n')
-                if tracker_type == 'CSRT':
-                    tracker = cv2.TrackerCSRT_create()
-                elif tracker_type == 'KCF':
-                    tracker = cv2.TrackerKCF_create()
-                elif tracker_type == 'MOSSE':
-                    tracker = cv2.TrackerMOSSE_create()
-                elif tracker_type == 'MIL':
-                    tracker = cv2.TrackerMIL_create()
-                elif tracker_type == 'BOOSTING':
-                    tracker = cv2.TrackerBoosting_create()
-                elif tracker_type == 'MEDIANFLOW':
-                    tracker = cv2.TrackerMedianFlow_create()
-                elif tracker_type == 'TLD':
-                    tracker = cv2.TrackerTLD_create()
-                elif tracker_type == 'GOTURN':
-                    tracker = cv2.TrackerGOTURN_create()
-        return tracker
-
-
-    def start_tracker(self, json_file_data, json_file_path, img_path, obj, color, annotation_formats):
-        tracker = self.call_tracker_constructor(self.tracker_type)
-        anchor_id = json_file_data['n_anchor_ids']
-        frame_data_dict = json_file_data['frame_data_dict']
-
-        pred_counter = 0
-        frame_data_dict = json_file_add_object(frame_data_dict, img_path, anchor_id, pred_counter, obj)
-        # tracker bbox format: xmin, xmax, w, h
-        xmin, ymin, xmax, ymax = obj[1:5]
-        initial_bbox = (xmin, ymin, xmax - xmin, ymax - ymin)
-        tracker.init(self.init_frame, initial_bbox)
-        for frame_path in self.next_frame_path_list:
-            next_image = cv2.imread(frame_path)
-            # get the new bbox prediction of the object
-            success, bbox = tracker.update(next_image.copy())
-            if pred_counter >= N_FRAMES:
-                success = False
-            if success:
-                pred_counter += 1
-                xmin, ymin, w, h = map(int, bbox)
-                xmax = xmin + w
-                ymax = ymin + h
-                obj = [gClassIdx, xmin, ymin, xmax, ymax]
-                frame_data_dict = json_file_add_object(frame_data_dict, frame_path, anchor_id, pred_counter, obj)
-                cv2.rectangle(next_image, (xmin, ymin), (xmax, ymax), color, LINE_THICKNESS)
-                # save prediction
-                annotation_paths = get_annotation_paths(frame_path, annotation_formats)
-                bbox = BBox.fromX1Y1X2Y2( xmin, ymin, xmax, ymax, self.img_w, self.img_h)
-                save_bounding_box(annotation_paths, bbox, gClassIdx)
-                # show prediction
-                cv2.imshow(WINDOW_NAME, next_image)
-                pressed_key = cv2.waitKey(DELAY)
-            else:
-                break
-
-        json_file_data.update({'n_anchor_ids': (anchor_id + 1)})
-        # save the updated data
-        with open(json_file_path, 'w') as outfile:
-            json.dump(json_file_data, outfile, sort_keys=True, indent=4)
-
-
 def get_cropped_img( img, centerX, centerY, width, height ):
     img_y, img_x, _ = img.shape
     crop_left = centerX - width
@@ -1384,18 +1197,10 @@ if __name__ == '__main__':
     last_img_index = len(IMAGE_PATH_LIST) - 1
 
     # create output directories
-    if len(VIDEO_NAME_DICT) > 0:
-        if not os.path.exists(TRACKER_DIR):
-            os.makedirs(TRACKER_DIR)
     for ann_dir in ANNOTATION_FORMATS:
         new_dir = os.path.join(OUTPUT_DIR, ann_dir)
         if not os.path.exists(new_dir):
             os.makedirs(new_dir)
-        for video_name_ext in VIDEO_NAME_DICT:
-            new_video_dir = os.path.join(new_dir, video_name_ext)
-            if not os.path.exists(new_video_dir):
-                os.makedirs(new_video_dir)
-
 
     # load class list
     with open('class_list.txt') as f:
