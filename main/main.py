@@ -133,6 +133,9 @@ class TaggedObjectManager:
                 self.selectedObject = None
 
 
+    def getSimilarObjects( self, bbox : BBox, epsilon = BBox.EPSILON ) -> list[TaggedObject]:
+        return [ obj for obj in self.objectList if obj.bbox.similar(bbox, epsilon ) ]
+
     def initObjectTracker( self, img : np.ndarray, trackerType:str = "CSRT" ):
         self._tracker = ObjectTracker( trackerType )
         self._trackedObjects = {}
@@ -152,10 +155,10 @@ class TaggedObjectManager:
 
         # First try to match up existing boxes
         for obj in self.objectList:
-            for id,bbox in trackerResults.items():
-                if bbox is None:
+            for id,trackerBbox in trackerResults.items():
+                if trackerBbox is None:
                     continue
-                if bbox.similar(obj.bbox, epsilon=.2):
+                if trackerBbox.similar(obj.bbox, epsilon=.2):
                     obj.trackerId = id
                     trackerResults.pop(id)
                     break
@@ -163,7 +166,7 @@ class TaggedObjectManager:
         # Do another pass, matching unmatched boxes by classIdx
         if trackByClass:
             idsToRemove = set()
-            for id,bbox in trackerResults.items():
+            for id,trackerBbox in trackerResults.items():
                 prevTrackedObj = self._trackedObjects.get(id, None)
                 if prevTrackedObj:
                     # Attempt to find an untracked object by class before creating a new one
@@ -177,12 +180,12 @@ class TaggedObjectManager:
 
         # Now add any new boxes tracked in
         idsToRemove = set()
-        for id,bbox in trackerResults.items():
-            for id,bbox in trackerResults.items():
+        for id,trackerBbox in trackerResults.items():
+            for id,trackerBbox in trackerResults.items():
                 prevTrackedObj = self._trackedObjects.get(id, None)
                 if prevTrackedObj:
                     if not prevTrackedObj.fixed:
-                        prevTrackedObj.bbox = bbox
+                        prevTrackedObj.bbox = trackerBbox
                     self.objectList.append(prevTrackedObj)
                     idsToRemove.add(id)
         for id in idsToRemove:
@@ -675,8 +678,13 @@ def edit_bbox(obj_to_edit: TaggedObject, action):
         new_x_right = min(imgX, int(action.split(':')[3]))
         new_y_bottom = min(imgY, int(action.split(':')[4]))
         obj_to_edit.bbox = BBox.fromX1Y1X2Y2( new_x_left, new_y_top, new_x_right, new_y_bottom, imgX, imgY )
-    else:
+    elif 'delete' in action:
         obj_to_edit = None
+    elif 'add' in action:
+        pass
+    else:
+        print(f"Unknown edit_bbox action: {action}")
+        return
 
     current_img_path = get_img_path()
 
@@ -687,8 +695,11 @@ def edit_bbox(obj_to_edit: TaggedObject, action):
                 lines = old_file.readlines()
 
             with open(ann_path, 'w') as new_file:
+                if 'add' in action:
+                    new_file.write( obj_to_edit.yoloLine() + '\n' )
+
                 for line in lines:
-                    if orig_obj != TaggedObject.fromYoloLine( line ):
+                    if not orig_obj.bbox.similar( TaggedObject.fromYoloLine( line ).bbox ):
                         # If not the object to edit then just copy it
                         new_file.write(line)
                     elif obj_to_edit:
@@ -696,6 +707,7 @@ def edit_bbox(obj_to_edit: TaggedObject, action):
                         new_file.write(new_yolo_line + '\n')
 
         elif '.xml' in ann_path:
+            assert(False) # PASCAL VOC is unmantained
             # edit PASCAL VOC file
             tree = ET.parse(ann_path)
             annotation = tree.getroot()
@@ -1226,6 +1238,98 @@ def draw_contours( img, thresh_low, thresh_high ):
         contour_img = cv2.drawContours(img, [contour], 0, (255,255,0), 1)
     return contour_img
 
+
+def run_tracker( selectedObj : TaggedObject, singleFrame : bool, deleteInFrames: bool):
+    global gImgIdx, gObjManager, gOrigImg, gMouseX, gMouseY
+
+    object_list = gObjManager.objectList
+
+    # Grab objects from previous frame if just single-frame
+    if singleFrame:
+        singleFrameIdx = gImgIdx
+        # Scan back for a frame that has annotations
+        while True:
+            gImgIdx = decrease_index(gImgIdx, last_img_index)
+            cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, gImgIdx)
+            imgPath = get_img_path()
+            object_list = gObjManager.objectList
+            if len(object_list) > 0 or singleFrameIdx == gImgIdx:
+                break
+    elif selectedObj:
+        # Track an object, but delete it each frame
+        object_list = [selectedObj]
+        if deleteBbox:
+            edit_bbox(object_list[0], 'delete')
+
+
+    if len(object_list) == 0:
+        print(f"Can't track video objects when no objects are marked in current frame")
+    else:
+        # Initialize trackers with the current frames annotated bounding boxes
+        tmpObjMan = TaggedObjectManager()
+        tmpObjMan.objectList = object_list
+        tmpObjMan.initObjectTracker( gOrigImg )
+
+        # Get list of frames
+        vid_last_idx = get_vid_img_index( gImgIdx, 1, last_img_index )
+        exitLoop = False
+
+        # If only processing a single frame we may have rewound quite a bit before finding an annotated frame.
+        #  Put us back to 1 before our active frame
+        if singleFrame:
+            gImgIdx = decrease_index(singleFrameIdx, last_img_index )
+
+        # Iterate through all of the remaining video frames
+        while gImgIdx != vid_last_idx and not exitLoop:
+            # Get the next image
+            gImgIdx = increase_index(gImgIdx, last_img_index)
+            cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, gImgIdx)
+            tmpObjMan.objectList = gObjManager.objectList # Update tracker manager with new image annotations
+
+            # Update the trackers with the new image
+            tmpObjMan.trackNewImage( gOrigImg )
+
+            # If a selected object is tracked then try to update it to current image objects
+            newSelectedObj = None
+            if selectedObj:
+                similarObjs = gObjManager.getSimilarObjects( selectedObj.bbox, epsilon=.1 )
+                if len(similarObjs) == 1:
+                    newSelectedObj = similarObjs[0]
+            selectedObj = newSelectedObj
+
+
+            if deleteInFrames:
+                # If deleting and there is a similar object, delete it. Otherwise break the loop
+                if selectedObj:
+                    edit_bbox( selectedObj, 'delete' )
+                else:
+                    exitLoop = True
+            else:
+                if selectedObj:
+                    exitLoop = True # This object is already in this frame
+                else:
+                    # Update the image with all tracked boxes
+                    for trackedObj in tmpObjMan.objectList:
+                        similarObjs = gObjManager.getSimilarObjects( trackedObj.bbox )
+                        if not len(similarObjs):
+                            # Add new object
+                            gObjManager.objectList.append(trackedObj)
+                            edit_bbox( trackedObj, 'add' )
+
+            # Show image
+            dbgImg = gOrigImg.copy()
+            draw_bboxes( dbgImg, gObjManager.objectList )
+            cv2.imshow( WINDOW_NAME, dbgImg )
+            zoomed_dbg_img = get_cropped_img( dbgImg, gMouseX, gMouseY, zoom_radius, zoom_radius )
+            cv2.imshow(ZOOM_WINDOW_NAME, zoomed_dbg_img)
+            if cv2.waitKey(1) != -1:
+                exitLoop = True
+
+            if singleFrame:
+                exitLoop = True
+
+
+
 # change to the directory of this script
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -1584,133 +1688,12 @@ if __name__ == '__main__':
             elif pressed_key == ord('P') or pressed_key == ord('p') or pressed_key == ord('0'):
                 singleFrame = ( pressed_key == ord('p') )
                 deleteBbox = ( pressed_key == ord('0') )
-                selected_obj = gObjManager.selectedObject
+                selectedObj = gObjManager.selectedObject
                 # check if the image is a frame from a video
                 is_from_video, video_name = is_frame_from_video(img_path)
-                if is_from_video and ( selected_obj or deleteBbox == False ):
-                    # get list of objects associated to that frame
-                    object_list = gObjManager.objectList
+                if is_from_video and ( selectedObj or deleteBbox == False ):
                     origImgIdx = gImgIdx
-
-                    object_tracker = ObjectTracker("CSRT")
-
-                    # Grab objects from previous frame if just single-frame
-                    if singleFrame:
-                        singleFrameIdx = gImgIdx
-                        while True:
-                            gImgIdx = decrease_index(gImgIdx, last_img_index)
-                            cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, gImgIdx)
-                            imgPath = get_img_path()
-                            object_list = gObjManager.objectList
-                            if len(object_list) > 0 or singleFrameIdx == gImgIdx:
-                                break
-                    elif selected_obj:
-                        # Track an object, but delete it each frame
-                        object_list = [selected_obj]
-                        if deleteBbox:
-                            edit_bbox(object_list[0], 'delete')
-
-
-                    if len(object_list) == 0:
-                        print(f"Can't track video objects when no objects are marked in current frame")
-                    else:
-                        # Initialize trackers with the current frames annotated bounding boxes
-                        object_tracker.setImage( gOrigImg )
-                        object_bboxes = [ obj.bbox for obj in object_list ]
-                        object_metadata = [{ 'class': obj.classIdx} for obj in object_list]
-                        object_tracker.updateDetections( object_bboxes, object_metadata )
-
-                    objects = object_tracker.update()
-                    if len(objects) > 0:
-                        # Get list of frames
-                        next_frame_path_list = get_next_frame_path_list(video_name, img_path)
-                        last_idx = get_vid_img_index( gImgIdx, 1, last_img_index )
-                        exitLoop = False
-
-                        # If only processing a single frame we may have rewound quite a bit. Put us back to 1 before our
-                        # active frame
-                        if singleFrame:
-                            gImgIdx = decrease_index(singleFrameIdx, last_img_index )
-
-                        # Iterate through all of the remaining video frames
-                        while gImgIdx != last_idx and not exitLoop:
-                            # Get the next image
-                            gImgIdx = increase_index(gImgIdx, last_img_index)
-                            cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, gImgIdx)
-                            imgPath = get_img_path()
-                            annotation_paths = get_annotation_paths(imgPath, ANNOTATION_FORMATS)
-
-                            # Update the trackers with the new image
-                            img = gOrigImg.copy()
-                            object_tracker.setImage( gOrigImg )
-                            objects = object_tracker.update()
-
-                            if len(gObjManager.objectList) > 0:
-                                # Deal with existing annotations
-                                annotated_bboxes = [ obj.bbox for obj in gObjManager.objectList]
-                                object_metadata = [{ 'class': obj.classIdx} for obj in gObjManager.objectList]
-                                updatedBoxes, matchedIds, unmatchedIds = object_tracker.matchDetections( annotated_bboxes, object_metadata )
-
-                                # Initially don't add any tracked objects
-                                trackedIdsToAdd = { key: False for key in objects.keys() }
-
-                                for trackerId in unmatchedIds:
-                                    # We tracked an object that is not annotated in this scene, so add it
-                                    trackedIdsToAdd[trackerId] = True
-
-                                # TODO: Revisit this loop. Do we need to run it if !selected_bbox?
-                                for idx,trackerId in enumerate(matchedIds):
-                                    if trackerId is not None:
-                                        if selected_obj is not None:
-                                            # This must match our selected box
-                                            matched_obj = gObjManager.objectList[idx]
-                                            if matched_obj.classIdx == selected_obj.classIdx:
-                                                if deleteBbox:
-                                                    edit_bbox(matched_obj, 'delete')
-                                                else: # Auto-adding a single tracked object, and it already is in frame?
-                                                    print(f"Found a matching object in new frame, stopping auto-add.")
-                                                    exitLoop = True
-                                            else:
-                                                if deleteBbox:
-                                                    print(f"Class mismatch in deleting matching object. Looking for {selected_obj.classIdx}, found {matched_obj.classIdx}")
-                                                    exitLoop = True
-                                                else:
-                                                    # The closest match isn't the same object, so we need to add our tracked object
-                                                    assert( len(updatedBoxes) == 1 )
-                                                    trackedIdsToAdd[trackerId] = True
-                                            break
-                                    else:
-                                        pass
-                            else:
-                                # No annotations? Then add every tracked object (unless we were deleting, in which case we abort)
-                                if deleteBbox:
-                                    exitLoop = True
-                                else:
-                                    trackedIdsToAdd = { key: True for key in objects.keys() }
-
-                            for trackerId,shouldAdd in trackedIdsToAdd.items():
-                                if shouldAdd:
-                                    tracker = object_tracker._trackers[trackerId]
-                                    classId = int( tracker.metadata['class'] )
-                                    save_bounding_box( annotation_paths, tracker.lastSeen, classId )
-
-                            dbgImg = img.copy()
-                            draw_bboxes_from_file( dbgImg, annotation_paths )
-                            cv2.imshow( WINDOW_NAME, dbgImg )
-                            zoomed_dbg_img = get_cropped_img( dbgImg, gMouseX, gMouseY, zoom_radius, zoom_radius )
-                            cv2.imshow(ZOOM_WINDOW_NAME, zoomed_dbg_img)
-                            if cv2.waitKey(1) != -1:
-                                break
-
-                            if singleFrame:
-                                break
-
-                            # for key,tracker in object_tracker._trackers.items():
-                            #     x1,y1,w,h = rxywh2x1y1wh(tracker.lastSeen, img.shape)
-                            #     cv2.rectangle( img, (x1,y1), (x1+w,y1+h), (0,0,255))
-                            #     cv2.putText( img, f"Id:{key} Missed: {tracker.lostCount}", (x1,y1), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255))
-                            # cv2.imshow( WINDOW_NAME, img )
-                            # cv2.waitKey()
+                    run_tracker( selectedObj, singleFrame, deleteBbox )
 
                     gRedrawNeeded = True
 
@@ -1719,21 +1702,6 @@ if __name__ == '__main__':
                         cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, origImgIdx)
 
 
-                    # # remove the objects in that frame that are already in the `.json` file
-                    # json_file_path = '{}.json'.format(os.path.join(TRACKER_DIR, video_name))
-                    # file_exists, json_file_data = get_json_file_data(json_file_path)
-                    # if file_exists:
-                    #     object_list = remove_already_tracked_objects(object_list, img_path, json_file_data)
-                    # if len(object_list) > 0:
-                    #     # get list of frames following this image
-                    #     next_frame_path_list = get_next_frame_path_list(video_name, img_path)
-                    #     # initial frame
-                    #     init_frame = gOrigImg.copy()
-                    #     label_tracker = LabelTracker(TRACKER_TYPE, init_frame, next_frame_path_list)
-                    #     for obj in object_list:
-                    #         gClassIdx = obj[0]
-                    #         color = class_rgb[gClassIdx].tolist()
-                    #         label_tracker.start_tracker(json_file_data, json_file_path, img_path, obj, color, annotation_formats)
             # quit key listener
             elif pressed_key == 27: # ESC on Windows
                 break
