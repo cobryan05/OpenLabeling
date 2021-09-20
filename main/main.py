@@ -203,7 +203,7 @@ ZOOM_WINDOW_NAME = 'OpenLabeling (Zoomed)'
 TRACKBAR_IMG   = 'Image'
 TRACKBAR_CLASS = 'Class'
 
-annotation_formats = {'YOLO_darknet' : '.txt'}
+ANNOTATION_FORMATS = {'YOLO_darknet' : '.txt'}
 TRACKER_DIR = os.path.join(OUTPUT_DIR, '.tracker')
 
 DRAW_FROM_PASCAL = args.draw_from_PASCAL_files
@@ -360,7 +360,7 @@ def set_img_index(x):
     image_name = os.path.basename(img_path)
     img_height, img_width, depth = (str(number) for number in gOrigImg.shape)
 
-    annotation_paths = get_annotation_paths(img_path, annotation_formats)
+    annotation_paths = get_annotation_paths(img_path, ANNOTATION_FORMATS)
     gObjManager.objectList = read_objects_from_file( annotation_paths )
     gObjManager.selectedObject = None
     for ann_path in annotation_paths:
@@ -674,7 +674,7 @@ def edit_bbox(obj_to_edit: TaggedObject, action):
 
     current_img_path = get_img_path()
 
-    for ann_path in get_annotation_paths(current_img_path, annotation_formats):
+    for ann_path in get_annotation_paths(current_img_path, ANNOTATION_FORMATS):
         if '.txt' in ann_path:
             # edit YOLO file
             with open(ann_path, 'r') as old_file:
@@ -1132,7 +1132,7 @@ def get_cropped_img( img, centerX, centerY, width, height ):
 def clear_bboxes():
     global gRedrawNeeded
     img_path = get_img_path()
-    for path in get_annotation_paths(img_path, annotation_formats):
+    for path in get_annotation_paths(img_path, ANNOTATION_FORMATS):
         if os.path.exists( path ):
             os.remove( path )
     gObjManager.objectList = []
@@ -1278,7 +1278,7 @@ if __name__ == '__main__':
     if len(VIDEO_NAME_DICT) > 0:
         if not os.path.exists(TRACKER_DIR):
             os.makedirs(TRACKER_DIR)
-    for ann_dir in annotation_formats:
+    for ann_dir in ANNOTATION_FORMATS:
         new_dir = os.path.join(OUTPUT_DIR, ann_dir)
         if not os.path.exists(new_dir):
             os.makedirs(new_dir)
@@ -1376,7 +1376,7 @@ if __name__ == '__main__':
 
             # get annotation paths
             img_path = get_img_path()
-            annotation_paths = get_annotation_paths(img_path, annotation_formats)
+            annotation_paths = get_annotation_paths(img_path, ANNOTATION_FORMATS)
             base_img = draw_bboxes( base_img, gObjManager.objectList, class_filter)
 
         tmp_img = base_img.copy()
@@ -1621,7 +1621,7 @@ if __name__ == '__main__':
                             gImgIdx = increase_index(gImgIdx, last_img_index)
                             cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, gImgIdx)
                             imgPath = get_img_path()
-                            annotation_paths = get_annotation_paths(imgPath, annotation_formats)
+                            annotation_paths = get_annotation_paths(imgPath, ANNOTATION_FORMATS)
 
                             # Update the trackers with the new image
                             img = gOrigImg.copy()
