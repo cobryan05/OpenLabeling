@@ -115,7 +115,12 @@ class TaggedObjectManager:
     def objectList(self, objects : list[TaggedObject] ):
         prevSelObj = self.selectedObject
         self._objectList = objects.copy()
-        self.selectedObject = prevSelObj
+        self.selectedObject = None
+        if prevSelObj:
+            similars = self.getSimilarObjects( prevSelObj.bbox, epsilon=.1 )
+            if len(similars) == 1:
+                self.selectedObject = similars[0]
+
 
     @property
     def selectedObject( self ):
@@ -371,7 +376,6 @@ def set_img_index(x):
 
     annotation_paths = get_annotation_paths(img_path, ANNOTATION_FORMATS)
     gObjManager.objectList = read_objects_from_file( annotation_paths )
-    gObjManager.selectedObject = None
     for ann_path in annotation_paths:
         if not os.path.isfile(ann_path):
             if '.txt' in ann_path:
