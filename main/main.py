@@ -1155,6 +1155,12 @@ def run_tracker( selectedObj : TaggedObject, singleFrame : bool, deleteInFrames:
             if singleFrame:
                 exitLoop = True
 
+        # Try to re-acquire the originally selected object
+        if selectedObj and curSelObj is None and selectedObj.trackerId != -1 and not deleteBbox:
+            idMatched = [ obj for obj in gObjManager.objectList if obj.trackerId == selectedObj.trackerId ]
+            if len(idMatched) == 1:
+                gObjManager.selectedObject = idMatched[0]
+
 
 
 # change to the directory of this script
