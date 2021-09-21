@@ -1249,7 +1249,6 @@ if __name__ == '__main__':
     edges_on = False
     text_on = True
     show_only_active_class = False
-    img_obj_bak = []
     base_img = None
     gRedrawNeeded = True
     invert_image = False
@@ -1373,7 +1372,6 @@ if __name__ == '__main__':
                 elif pressed_key == ord('}'):
                     gImgIdx = get_vid_img_index( gImgIdx, 1, last_img_index )
                 cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, gImgIdx)
-                img_obj_bak = []
             elif pressed_key == ord(' '):
                 play_video = True
             elif pressed_key == ord('r'):
@@ -1493,11 +1491,6 @@ if __name__ == '__main__':
 
                 gObjManager.objectList = yoloObjects
                 restore_bboxes( tmp_img, gObjManager.objectList )
-
-            # elif pressed_key == ord('u'):
-            #     tmp = gImgObjects.copy() # TODO: gImgObjects
-            #     restore_bboxes( tmp_img, annotation_paths, img_obj_bak)
-            #     img_obj_bak = tmp
             elif pressed_key == ord('P') or pressed_key == ord('p') or pressed_key == ord('0'):
                 singleFrame = ( pressed_key == ord('p') )
                 deleteBbox = ( pressed_key == ord('0') )
