@@ -188,13 +188,12 @@ class TaggedObjectManager:
         # Now add any new boxes tracked in
         idsToRemove = set()
         for id,trackerBbox in trackerResults.items():
-            for id,trackerBbox in trackerResults.items():
-                prevTrackedObj = self._trackedObjects.get(id, None)
-                if prevTrackedObj:
-                    if not prevTrackedObj.fixed:
-                        prevTrackedObj.bbox = trackerBbox
-                    self.objectList.append(prevTrackedObj)
-                    idsToRemove.add(id)
+            prevTrackedObj = self._trackedObjects.get(id, None)
+            if prevTrackedObj:
+                if not prevTrackedObj.fixed:
+                    prevTrackedObj.bbox = trackerBbox
+                self.objectList.append(prevTrackedObj)
+                idsToRemove.add(id)
         for id in idsToRemove:
             trackerResults.pop(id)
 
@@ -1075,7 +1074,7 @@ def run_tracker( selectedObj : TaggedObject, singleFrame : bool, deleteInFrames:
                     break
         else:
             # Track the selected object forward into the next frame
-            pass
+            object_list = [selectedObj]
     elif selectedObj:
         # Track an object, but delete it each frame
         object_list = [selectedObj]
@@ -1105,15 +1104,18 @@ def run_tracker( selectedObj : TaggedObject, singleFrame : bool, deleteInFrames:
             # Get the next image
             gImgIdx = increase_index(gImgIdx, last_img_index)
             cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, gImgIdx)
-            tmpObjMan.objectList = gObjManager.objectList # Update tracker manager with new image annotations
 
             # Update the trackers with the new image
+            tmpObjMan.objectList = []
             tmpObjMan.trackNewImage( gOrigImg )
 
             # If a selected object is tracked then try to update it to current image objects
             newSelectedObj = None
             if curSelObj:
                 similarObjs = gObjManager.getSimilarObjects( curSelObj.bbox, epsilon=.1 )
+                # Similar objs must be the same class
+                # TODO: getSimilarObjects should do this kind of comparison
+                similarObjs = [obj for obj in similarObjs if obj.classIdx == curSelObj.classIdx]
                 if len(similarObjs) == 1:
                     newSelectedObj = similarObjs[0]
             curSelObj = newSelectedObj
