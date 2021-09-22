@@ -6,4 +6,4 @@
 	url = https://github.com/ultralytics/yolov5.git
 [submodule "submodules/trackerTools"]
 	path = submodules/trackerTools
-	url = C:/users/chris/projects/git/trackerTools/
+	url = https://github.com/cobryan05/TrackerTools.git
