@@ -1441,7 +1441,8 @@ if __name__ == '__main__':
                         '[p] Track objects from the previous frame into this frame\n'
                         '[P] Track objects (just selected, or all if none selected) from this frame into the rest of video\n'
                         '[0] Delete the selected object, from this frame and the rest of the video\n'
-                        '[`] or [~] cycle selected bbox'
+                        '[=] "Fix" the bbox in place on forward tracking\n'
+                        '[`] or [~] cycle selected bbox\n'
                         '[space] Auto-advance through the current video. Press any key to stop\n'
                         )
                 display_text(text, 5000)
