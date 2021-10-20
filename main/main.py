@@ -703,13 +703,17 @@ def edit_bbox(obj_to_edit: TaggedObject, action):
                 if 'add' in action:
                     new_file.write( obj_to_edit.yoloLine() + '\n' )
 
+                edit_done = False
                 for line in lines:
-                    if not orig_obj.bbox.similar( TaggedObject.fromYoloLine( line ).bbox ):
-                        # If not the object to edit then just copy it
+                    if edit_done or not orig_obj.bbox.similar( TaggedObject.fromYoloLine( line ).bbox ):
+                        # If not the object to edit, or already edited, then just copy it
                         new_file.write(line)
-                    elif obj_to_edit:
-                        new_yolo_line = obj_to_edit.yoloLine()
-                        new_file.write(new_yolo_line + '\n')
+                    else:
+                        edit_done = True
+                        # Either skip the object (delete) or insert the edited object
+                        if obj_to_edit:
+                            new_yolo_line = obj_to_edit.yoloLine()
+                            new_file.write(new_yolo_line + '\n')
 
         elif '.xml' in ann_path:
             assert(False) # PASCAL VOC is unmantained
