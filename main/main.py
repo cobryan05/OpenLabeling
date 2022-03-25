@@ -1440,6 +1440,8 @@ if __name__ == '__main__':
                         '[1|3] zoom in|zoom out\n'
                         '[p] Track objects from the previous frame into this frame\n'
                         '[P] Track objects (just selected, or all if none selected) from this frame into the rest of video\n'
+                        '[o] "Set" trackers for all current boxes\n'
+                        '[O] "Restore" saved tracker boxes\n'
                         '[0] Delete the selected object, from this frame and the rest of the video\n'
                         '[=] "Fix" the bbox in place on forward tracking\n'
                         '[`] or [~] cycle selected bbox\n'
@@ -1512,9 +1514,9 @@ if __name__ == '__main__':
                 singleFrame = ( pressed_key == ord('p') )
                 deleteBbox = ( pressed_key == ord('0') )
                 selectedObj = gObjManager.selectedObject
-                # check if the image is a frame from a video
-                is_from_video, video_name = is_frame_from_video(img_path)
-                if is_from_video and ( selectedObj or deleteBbox == False ):
+
+                # Run tracker on requested frames
+                if selectedObj or deleteBbox == False:
                     origImgIdx = gImgIdx
                     run_tracker( selectedObj, singleFrame, deleteBbox )
 
