@@ -1199,7 +1199,7 @@ if __name__ == '__main__':
                 desired_img_format = '.png'
                 converted_path = convert_czi_to_image( f_path, desired_img_format )
                 IMAGE_PATH_LIST.append(converted_path)
-            else:
+            elif f_ext not in ['.txt']:
                 # test if it is a video
                 test_video_cap = cv2.VideoCapture(f_path)
                 n_frames = int(test_video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
