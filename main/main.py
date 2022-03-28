@@ -152,7 +152,8 @@ class TaggedObjectManager:
             self._trackedObjects[obj.trackerId] = obj
 
 
-    def trackNewImage( self, img : np.ndarray, trackByClass : bool = True ):
+    def trackNewImage( self, img : np.ndarray, trackByClass : bool = True ) -> tuple( list[TaggedObject], list[TaggedObject], list[TaggedObject] ):
+        """ Returns (matched objects, added objects, lost objects)"""
         if self._tracker is None:
             return
 
@@ -160,6 +161,12 @@ class TaggedObjectManager:
         self._tracker.setImage( img )
         trackerResults = self._tracker.update()
 
+        lostObjs = []
+        lostIds = [key for key in trackerResults if trackerResults[key] is None]
+        for id in lostIds:
+            lostObjs.append( trackerResults.pop(id) )
+
+        matchedObjs = []
         # First try to match up existing boxes
         for obj in self.objectList:
             for id,trackerBbox in trackerResults.items():
@@ -167,7 +174,7 @@ class TaggedObjectManager:
                     continue
                 if trackerBbox.similar(obj.bbox, epsilon=.2):
                     obj.trackerId = id
-                    trackerResults.pop(id)
+                    matchedObjs.append( trackerResults.pop(id) )
                     break
 
         # Do another pass, matching unmatched boxes by classIdx
@@ -183,8 +190,9 @@ class TaggedObjectManager:
                             idsToRemove.add(id)
                             break
             for id in idsToRemove:
-                trackerResults.pop(id)
+                matchedObjs.append( trackerResults.pop(id) )
 
+        addedObjs = []
         # Now add any new boxes tracked in
         idsToRemove = set()
         for id,trackerBbox in trackerResults.items():
@@ -195,10 +203,12 @@ class TaggedObjectManager:
                 self.objectList.append(prevTrackedObj)
                 idsToRemove.add(id)
         for id in idsToRemove:
-            trackerResults.pop(id)
+            addedObjs.append( trackerResults.pop(id) )
 
         if len(trackerResults) > 0:
             print(f"There were {len(trackerResults)} unhandled tracker results!")
+
+        return (matchedObjs, addedObjs, lostObjs)
 
 
 gObjManager : TaggedObjectManager = TaggedObjectManager()
