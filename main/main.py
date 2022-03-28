@@ -1074,7 +1074,7 @@ def run_tracker( selectedObj : TaggedObject, singleFrame : bool, deleteInFrames:
                 cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, gImgIdx)
                 imgPath = get_img_path()
                 object_list = gObjManager.objectList
-                if len(object_list) > 0 or singleFrameIdx == gImgIdx:
+                if len(object_list) > 0 or singleFrameIdx == gImgIdx or cv2.waitKey(1) != -1:
                     break
         else:
             # Track the selected object forward into the next frame
