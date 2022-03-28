@@ -61,6 +61,8 @@ gClassIdx = 0
 gImgIdx = 0
 gOrigImg = None
 
+METADATA_KEY_OBJ = "KEY_obj"
+
 
 class TaggedObject:
     def __init__(self):
@@ -91,7 +93,6 @@ class TaggedObject:
 class TaggedObjectManager:
     def __init__(self):
         self._tracker : ObjectTracker = None
-        self._trackedObjects : dict[int, TaggedObject] = {}
         self._objectList : list[TaggedObject]  = []
         self._selectedIdx : int = -1
 
@@ -145,11 +146,12 @@ class TaggedObjectManager:
 
     def initObjectTracker( self, img : np.ndarray, trackerType:str = "CSRT" ):
         self._tracker = ObjectTracker( trackerType )
-        self._trackedObjects = {}
-        self._tracker.setImage( img )
-        for obj in self.objectList:
-            obj.trackerId = self._tracker.addObject( obj.bbox )
-            self._trackedObjects[obj.trackerId] = obj
+
+        bboxList = [ obj.bbox for obj in self.objectList ]
+        metadataList = [ { METADATA_KEY_OBJ: obj } for obj in self.objectList ]
+        trackedObjs, newKeys, _, matchedKeys = self._tracker.update( img, detections=bboxList, metadata=metadataList)
+        for idx,obj in enumerate(self.objectList):
+            obj.trackerId = matchedKeys[idx]
 
 
     def trackNewImage( self, img : np.ndarray, trackByClass : bool = True ) -> tuple( list[TaggedObject], list[TaggedObject], list[TaggedObject] ):
@@ -158,57 +160,19 @@ class TaggedObjectManager:
             return
 
         # Set the new image and update the tracker
-        self._tracker.setImage( img )
-        trackerResults = self._tracker.update()
+        trackedItems, newKeys, lostKeys, matchedKeys = self._tracker.update(img)
 
-        lostObjs = []
-        lostIds = [key for key in trackerResults if trackerResults[key] is None]
-        for id in lostIds:
-            lostObjs.append( trackerResults.pop(id) )
+        # TODO: trackByClass? Lost objects?
 
-        matchedObjs = []
-        # First try to match up existing boxes
-        for obj in self.objectList:
-            for id,trackerBbox in trackerResults.items():
-                if trackerBbox is None:
-                    continue
-                if trackerBbox.similar(obj.bbox, epsilon=.2):
-                    obj.trackerId = id
-                    matchedObjs.append( trackerResults.pop(id) )
-                    break
-
-        # Do another pass, matching unmatched boxes by classIdx
-        if trackByClass:
-            idsToRemove = set()
-            for id,trackerBbox in trackerResults.items():
-                prevTrackedObj = self._trackedObjects.get(id, None)
-                if prevTrackedObj:
-                    # Attempt to find an untracked object by class before creating a new one
-                    for obj in self.objectList:
-                        if prevTrackedObj.classIdx == obj.classIdx and obj.trackerId == -1: # TODO: We don't initialize the id
-                            obj.trackerId = id
-                            idsToRemove.add(id)
-                            break
-            for id in idsToRemove:
-                matchedObjs.append( trackerResults.pop(id) )
-
-        addedObjs = []
-        # Now add any new boxes tracked in
-        idsToRemove = set()
-        for id,trackerBbox in trackerResults.items():
-            prevTrackedObj = self._trackedObjects.get(id, None)
-            if prevTrackedObj:
-                if not prevTrackedObj.fixed:
-                    prevTrackedObj.bbox = trackerBbox
-                self.objectList.append(prevTrackedObj)
-                idsToRemove.add(id)
-        for id in idsToRemove:
-            addedObjs.append( trackerResults.pop(id) )
-
-        if len(trackerResults) > 0:
-            print(f"There were {len(trackerResults)} unhandled tracker results!")
-
-        return (matchedObjs, addedObjs, lostObjs)
+        for key,item in trackedItems.items():
+            taggedObject = item.metadata.get(METADATA_KEY_OBJ, None)
+            if taggedObject:
+                # If not fixed then update tracked bounding box with new location
+                if not taggedObject.fixed:
+                    taggedObject.bbox = item.bbox
+                # Add this box if it is new
+                if not taggedObject in self.objectList:
+                    self.objectList.append(taggedObject)
 
 
 gObjManager : TaggedObjectManager = TaggedObjectManager()
@@ -993,8 +957,8 @@ def restore_bboxes( img, img_objects: list[TaggedObject] ):
 def run_yolo( img, yolo ):
     results = yolo.runInference( img )
     yolo_img_objs = []
-    for (x,y),(w,h),conf,objclass in results:
-        yolo_img_objs.append( ( objclass, x, y, x+w, y+h ) )
+    for bbox, conf, objClass, label in results:
+        yolo_img_objs.append( ( objClass, bbox ) )
     return yolo_img_objs
 
 
@@ -1510,10 +1474,10 @@ if __name__ == '__main__':
                 yoloDetections = run_yolo( gOrigImg, yolo )
                 imgY, imgX = gOrigImg.shape[:2]
                 yoloObjects: list[TaggedObject] = []
-                for det in yoloDetections:
+                for detClass, detBbox in yoloDetections:
                     newObject = TaggedObject()
-                    newObject.classIdx = det[0]
-                    newObject.bbox = BBox.fromX1Y1X2Y2( *det[1:], imgX, imgY )
+                    newObject.classIdx = detClass
+                    newObject.bbox = detBbox.copy()
                     newObject.name = CLASS_LIST[newObject.classIdx]
 
                     yoloObjects.append(newObject)
