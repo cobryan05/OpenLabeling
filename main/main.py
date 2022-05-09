@@ -819,20 +819,23 @@ def convert_video_to_images(video_path, n_frames, desired_img_format):
     file_path += file_extension
     video_name_ext = os.path.basename(file_path)
     if not os.path.exists(file_path):
-        print(' Converting video to individual frames...')
+        print(f' Converting video to individual frames... {file_path}')
         cap = cv2.VideoCapture(video_path)
         os.makedirs(file_path)
         # read the video
-        for i in tqdm(range(n_frames)):
-            if not cap.isOpened():
-                break
-            # capture frame-by-frame
+        i = 0
+        ret = True
+        status = tqdm(total=() if n_frames is None else n_frames)
+        while cap.isOpened():
+            status.update()
             ret, frame = cap.read()
-            if ret == True:
+            if ret == False or ( n_frames is not None and i >= n_frames):
+                break
                 # save each frame (we use this format to avoid repetitions)
-                frame_name =  '{}_{}{}'.format(video_name_ext, i, desired_img_format)
-                frame_path = os.path.join(file_path, frame_name)
-                cv2.imwrite(frame_path, frame)
+            frame_name =  '{}_{}{}'.format(video_name_ext, i, desired_img_format)
+            frame_path = os.path.join(file_path, frame_name)
+            cv2.imwrite(frame_path, frame)
+            i += 1
         # release the video capture object
         cap.release()
     return file_path, video_name_ext
@@ -1178,10 +1181,12 @@ if __name__ == '__main__':
                 test_video_cap = cv2.VideoCapture(f_path)
                 n_frames = int(test_video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
                 test_video_cap.release()
-                if n_frames > 0:
+                if n_frames != 0:
+                    if n_frames < 0:
+                        n_frames = None # Read until failure
                     # it is a video
                     desired_img_format = '.jpg'
-                    video_frames_path, video_name_ext = convert_video_to_images(f_path, n_frames, desired_img_format)
+                    video_frames_path, video_name_ext = convert_video_to_images(f_path, 15, desired_img_format)
                     # add video frames to image list
                     frame_list = sorted(os.listdir(video_frames_path), key = natural_sort_key)
                     ## store information about those frames
