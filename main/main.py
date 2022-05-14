@@ -73,7 +73,7 @@ class TaggedObject:
         self.fixed : bool = False
 
     def __eq__(self, other):
-        return other is not None and self.bbox == other.bbox
+        return other is not None and self.bbox == other.bbox and self.name == other.name
 
     @staticmethod
     def fromYoloLine( yoloLine: str ) -> TaggedObject:
@@ -118,7 +118,7 @@ class TaggedObjectManager:
         self._objectList = objects.copy()
         self.selectedObject = None
         if prevSelObj:
-            similars = self.getSimilarObjects( prevSelObj.bbox, epsilon=.1 )
+            similars = self.getSimilarObjects( prevSelObj.bbox, distEpsilon=.1 )
             if len(similars) == 1:
                 self.selectedObject = similars[0]
 
@@ -141,8 +141,8 @@ class TaggedObjectManager:
                 self.selectedObject = None
 
 
-    def getSimilarObjects( self, bbox : BBox, epsilon = BBox.EPSILON ) -> list[TaggedObject]:
-        return [ obj for obj in self.objectList if obj.bbox.similar(bbox, epsilon ) ]
+    def getSimilarObjects( self, bbox : BBox, distEpsilon = BBox.EPSILON_DIST, sizeEpsilon = BBox.EPSILON_SIZE ) -> list[TaggedObject]:
+        return [ obj for obj in self.objectList if obj.bbox.similar(bbox, distEpsilon, sizeEpsilon ) ]
 
     def initObjectTracker( self, img : np.ndarray, trackerType:str = "CSRT" ):
         self._tracker = ObjectTracker( trackerType )
@@ -1093,7 +1093,7 @@ def run_tracker( selectedObj : TaggedObject, singleFrame : bool, deleteInFrames:
             # If a selected object is tracked then try to update it to current image objects
             newSelectedObj = None
             if curSelObj:
-                similarObjs = gObjManager.getSimilarObjects( curSelObj.bbox, epsilon=.1 )
+                similarObjs = gObjManager.getSimilarObjects( curSelObj.bbox, distEpsilon=.1 )
                 # Similar objs must be the same class
                 # TODO: getSimilarObjects should do this kind of comparison
                 similarObjs = [obj for obj in similarObjs if obj.classIdx == curSelObj.classIdx]
