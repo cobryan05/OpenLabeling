@@ -44,6 +44,7 @@ parser.add_argument('-i', '--input_dir', default='input', type=str, help='Path t
 parser.add_argument('-o', '--output_dir', default='output', type=str, help='Path to output directory')
 parser.add_argument('-t', '--thickness', default='1', type=int, help='Bounding box and cross line thickness')
 parser.add_argument('-y', '--yoloWeights', default='', type=str, help='YOLO Weights file to use for prediction')
+parser.add_argument('-v', '--videoStride', default=1, type=int, help='When importing a video, only take every nth frame ')
 parser.add_argument('--draw-from-PASCAL-files', action='store_true', help='Draw bounding boxes from the PASCAL files') # default YOLO
 '''
 tracker_types = ['CSRT', 'KCF','MOSSE', 'MIL', 'BOOSTING', 'MEDIANFLOW', 'TLD', 'GOTURN', 'DASIAMRPN']
@@ -810,7 +811,7 @@ def natural_sort_key(s, _nsre=re.compile('([0-9]+)')):
             for text in _nsre.split(s)]
 
 
-def convert_video_to_images(video_path, n_frames, desired_img_format):
+def convert_video_to_images(video_path, n_frames, desired_img_format, everyNth=1):
     # create folder to store images (if video was not converted to images already)
     file_path, file_extension = os.path.splitext(video_path)
     # append extension to avoid collision of videos with same name
@@ -823,19 +824,24 @@ def convert_video_to_images(video_path, n_frames, desired_img_format):
         cap = cv2.VideoCapture(video_path)
         os.makedirs(file_path)
         # read the video
-        i = 0
+        frameNum = 0
         ret = True
         status = tqdm(total=() if n_frames is None else n_frames)
         while cap.isOpened():
             status.update()
             ret, frame = cap.read()
-            if ret == False or ( n_frames is not None and i >= n_frames):
+            frameNum += 1
+            if ret == False or ( n_frames is not None and frameNum >= n_frames):
                 break
-                # save each frame (we use this format to avoid repetitions)
-            frame_name =  '{}_{}{}'.format(video_name_ext, i, desired_img_format)
+
+            # Only take every nth frame
+            if frameNum % everyNth != 0:
+                continue
+
+            # save each frame (we use this format to avoid repetitions)
+            frame_name =  '{}_{}{}'.format(video_name_ext, frameNum, desired_img_format)
             frame_path = os.path.join(file_path, frame_name)
             cv2.imwrite(frame_path, frame)
-            i += 1
         # release the video capture object
         cap.release()
     return file_path, video_name_ext
@@ -1186,7 +1192,7 @@ if __name__ == '__main__':
                         n_frames = None # Read until failure
                     # it is a video
                     desired_img_format = '.jpg'
-                    video_frames_path, video_name_ext = convert_video_to_images(f_path, 15, desired_img_format)
+                    video_frames_path, video_name_ext = convert_video_to_images(f_path, n_frames, desired_img_format, args.videoStride)
                     # add video frames to image list
                     frame_list = sorted(os.listdir(video_frames_path), key = natural_sort_key)
                     ## store information about those frames
