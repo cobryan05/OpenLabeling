@@ -61,8 +61,10 @@ args = parser.parse_args()
 gClassIdx = 0
 gImgIdx = 0
 gOrigImg = None
+gCapsOn = False
 
 METADATA_KEY_OBJ = "KEY_obj"
+CAPSLOCK_KEY = 229
 
 
 class TaggedObject:
@@ -337,11 +339,13 @@ def set_img_index(x):
     global gImgIdx, gOrigImg, gObjManager, gRedrawNeeded
     gImgIdx = x
     img_path = get_img_path()
-    gOrigImg = cv2.imread(img_path)
-    gRedrawNeeded = True
     text = 'Showing image {}/{}, path: {}'.format(str(gImgIdx), str(last_img_index), img_path)
-    display_text(text, 1000)
+    gOrigImg = cv2.imread(img_path)
+    if gOrigImg is None:
+        text = f"{text}\nFailed to load image"
 
+    gRedrawNeeded = True
+    display_text(text, 1000)
     # create empty annotation files for each image, if it doesn't exist already
     abs_path = os.path.abspath(img_path)
     folder_name = os.path.dirname(img_path)
@@ -1272,7 +1276,7 @@ if __name__ == '__main__':
         color = class_rgb[gClassIdx].tolist()
 
         # Draw the image except the mouse
-        if gRedrawNeeded:
+        if gRedrawNeeded and gOrigImg is not None:
             gRedrawNeeded = False
             base_img = gOrigImg.copy()
             height, width = base_img.shape[:2]
@@ -1346,6 +1350,10 @@ if __name__ == '__main__':
 
         pressed_key = cv2.waitKey(DELAY)
 
+        # Convert to caps if capslock is on
+        if gCapsOn and pressed_key > ord('a') and pressed_key < ord('z'):
+            pressed_key += ord('A') - ord('a')
+
         # Play video until the end of the video is reached or any key is pressed
         if play_video:
             if -1 != pressed_key:
@@ -1373,6 +1381,9 @@ if __name__ == '__main__':
                 elif pressed_key == ord('}'):
                     gImgIdx = get_vid_img_index( gImgIdx, 1, last_img_index )
                 cv2.setTrackbarPos(TRACKBAR_IMG, WINDOW_NAME, gImgIdx)
+            elif pressed_key == CAPSLOCK_KEY:
+                gCapsOn = not gCapsOn
+                display_text(f"Caps lock: {gCapsOn}", 1000)
             elif pressed_key == ord(' '):
                 play_video = True
             elif pressed_key == ord('r'):
