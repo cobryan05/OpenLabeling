@@ -17,7 +17,6 @@ from sklearn.cluster import MiniBatchKMeans
 
 submodules_dir = os.path.join( pathlib.Path('__file__').parent.resolve(), "..", "submodules" )
 sys.path.append( submodules_dir )
-sys.path.append( os.path.join(submodules_dir, "yolov5") )
 
 from trackerTools.objectTracker import ObjectTracker
 from trackerTools.bbox import BBox

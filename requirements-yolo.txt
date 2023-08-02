@@ -5,3 +5,4 @@ requests
 pyyaml
 pillow
 pandas
+yolov7detect
