@@ -146,7 +146,7 @@ class TaggedObjectManager:
     def getSimilarObjects( self, bbox : BBox, distEpsilon = BBox.EPSILON_DIST, sizeEpsilon = BBox.EPSILON_SIZE ) -> list[TaggedObject]:
         return [ obj for obj in self.objectList if obj.bbox.similar(bbox, distEpsilon, sizeEpsilon ) ]
 
-    def initObjectTracker( self, img : np.ndarray, trackerType:str = "CSRT" ):
+    def initObjectTracker( self, img : np.ndarray, trackerType:str = "MIL" ):
         self._tracker = ObjectTracker( trackerType )
 
         bboxList = [ obj.bbox for obj in self.objectList ]
@@ -1008,7 +1008,7 @@ def auto_contour_threshold( img, stop_avg_mult_thresh = 1.05, start_test_val = 3
     prev_test_val = start_test_val
     for test_val in range( start_test_val, low_thresh, -2 ):
         edge_img = cv2.Canny( imgray, low_thresh, test_val )
-        _, contours, _ = cv2.findContours(edge_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(edge_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
         if prev_cnt is not None:
             # How many contours are there, as a % of the previous value's count
@@ -1039,7 +1039,7 @@ def draw_masked( img, mask_thresh=.05):
 def draw_contours( img, thresh_low, thresh_high ):
     imgray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     thresh = cv2.Canny( imgray, thresh_low, thresh_high )
-    im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     for contour in contours:
         contour_img = cv2.drawContours(img, [contour], 0, (255,255,0), 1)
     return contour_img
@@ -1401,7 +1401,7 @@ if __name__ == '__main__':
                 masked_on = not masked_on
                 gRedrawNeeded = True
             elif pressed_key == ord('o'):
-                gObjManager.initObjectTracker( gOrigImg, "CSRT")
+                gObjManager.initObjectTracker( gOrigImg, "MIL")
                 gRedrawNeeded = True
             elif pressed_key == ord('O'):
                 gObjManager.trackNewImage( gOrigImg )
